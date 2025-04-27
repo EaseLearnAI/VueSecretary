@@ -6,7 +6,14 @@
       </div>
     </div>
     <div class="message-content">
-      <div class="message-text">
+      <!-- Display typing indicator for analyzing state -->
+      <div v-if="message.isAnalyzing" class="typing-indicator">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <!-- Display message text if not analyzing -->
+      <div v-else class="message-text">
         <p>{{ message.content }}</p>
       </div>
       
@@ -21,7 +28,7 @@
         @update:habit="$emit('update:habit', $event)"
       />
       
-      <div class="message-timestamp">
+      <div class="message-timestamp" v-if="message.timestamp">
         {{ formatTime(message.timestamp) }}
       </div>
     </div>
@@ -37,12 +44,12 @@ const props = defineProps({
     type: Object,
     required: true,
     validator: (value) => {
-      return value.type && value.content && value.timestamp;
+      return value.type && (value.content || value.isAnalyzing) && value.timestamp;
     }
   }
 });
 
-const emits = defineEmits(['update:event', 'update:task', 'update:habit', 'import-data']);
+const emits = defineEmits(['update:event', 'update:task', 'update:habit']);
 
 // Format timestamp to a readable time
 const formatTime = (timestamp) => {
@@ -154,5 +161,41 @@ const formatTime = (timestamp) => {
 
 .message-container.user .message-timestamp {
   text-align: right;
+}
+
+/* Typing indicator */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: white;
+  border-radius: 18px 18px 18px 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--app-gray, #6c757d);
+  margin: 0 2px;
+  animation: bounce 1s infinite;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-5px);
+  }
 }
 </style> 

@@ -9,7 +9,7 @@
       <div class="cards-container">
         <div v-for="(event, index) in events" :key="index" class="card event-card">
           <div class="card-header">
-            <span class="card-title">{{ event.title }}</span>
+            <span class="card-title">{{ event.title || event.content }}</span>
             <div class="card-actions">
               <button class="action-btn" @click="updateEvent(event, 'edit')">
                 <font-awesome-icon icon="pen" />
@@ -22,12 +22,16 @@
           <div class="card-content">
             <div class="card-detail">
               <font-awesome-icon icon="clock" class="detail-icon" />
-              <span>{{ formatDateTime(event.startTime) }}</span>
+              <span>{{ formatDateTime(event.startTime || event.time) }}</span>
               <span v-if="event.endTime"> - {{ formatDateTime(event.endTime) }}</span>
             </div>
             <div v-if="event.location" class="card-detail">
               <font-awesome-icon icon="map-marker-alt" class="detail-icon" />
               <span>{{ event.location }}</span>
+            </div>
+            <div v-if="event.priority" class="card-detail">
+              <font-awesome-icon icon="flag" class="detail-icon" />
+              <span>优先级: {{ formatPriority(event.priority) }}</span>
             </div>
             <div v-if="event.description" class="card-description">
               {{ event.description }}
@@ -60,9 +64,9 @@
             </div>
           </div>
           <div class="card-content">
-            <div v-if="task.dueDate" class="card-detail">
+            <div v-if="task.dueDate || task.deadline" class="card-detail">
               <font-awesome-icon icon="calendar-day" class="detail-icon" />
-              <span>{{ formatDate(task.dueDate) }}</span>
+              <span>{{ formatDate(task.dueDate || task.deadline) }}</span>
             </div>
             <div v-if="task.priority" class="card-detail">
               <font-awesome-icon icon="flag" class="detail-icon" />
@@ -70,6 +74,25 @@
             </div>
             <div v-if="task.description" class="card-description">
               {{ task.description }}
+            </div>
+            
+            <!-- Subtasks -->
+            <div v-if="task.subtasks && task.subtasks.length > 0" class="subtasks">
+              <div class="subtasks-header">子任务</div>
+              <div v-for="(subtask, subtaskIndex) in task.subtasks" :key="subtaskIndex" class="subtask-item">
+                <div class="subtask-checkbox">
+                  <font-awesome-icon icon="circle" class="subtask-icon" />
+                </div>
+                <div class="subtask-content">
+                  <div class="subtask-title">{{ subtask.title || subtask.content }}</div>
+                  <div v-if="subtask.scheduledTime" class="subtask-time">
+                    建议时间: {{ subtask.scheduledTime }}
+                  </div>
+                  <div v-if="subtask.estimatedDuration" class="subtask-duration">
+                    预计用时: {{ subtask.estimatedDuration }}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -100,12 +123,22 @@
               <font-awesome-icon icon="repeat" class="detail-icon" />
               <span>{{ formatFrequency(habit.frequency) }}</span>
             </div>
-            <div v-if="habit.timeOfDay" class="card-detail">
+            <div v-if="habit.timeOfDay || habit.schedule" class="card-detail">
               <font-awesome-icon icon="clock" class="detail-icon" />
-              <span>{{ habit.timeOfDay }}</span>
+              <span>{{ habit.timeOfDay || habit.schedule }}</span>
             </div>
             <div v-if="habit.description" class="card-description">
               {{ habit.description }}
+            </div>
+            
+            <!-- Habit plan -->
+            <div v-if="habit.plan && habit.plan.steps && habit.plan.steps.length > 0" class="habit-plan">
+              <div class="habit-plan-header">计划步骤</div>
+              <ul class="habit-plan-steps">
+                <li v-for="(step, stepIndex) in habit.plan.steps" :key="stepIndex">
+                  {{ step }}
+                </li>
+              </ul>
             </div>
           </div>
         </div>
@@ -137,33 +170,63 @@ const emit = defineEmits(['update:event', 'update:task', 'update:habit']);
 // Format date and time
 const formatDate = (date) => {
   if (!date) return '';
-  const dateObj = new Date(date);
-  return dateObj.toLocaleDateString('zh-CN', { 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
+  
+  // Handle date strings that are not in ISO format
+  if (typeof date === 'string' && !date.includes('T') && !date.includes('-')) {
+    return date; // Return as is for descriptive dates like "明天" or "周五之前"
+  }
+  
+  try {
+    const dateObj = new Date(date);
+    return dateObj.toLocaleDateString('zh-CN', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  } catch (e) {
+    return date; // Fallback to original string if parsing fails
+  }
 };
 
 const formatDateTime = (dateTime) => {
   if (!dateTime) return '';
-  const dateObj = new Date(dateTime);
-  return dateObj.toLocaleString('zh-CN', { 
-    month: 'short', 
-    day: 'numeric',
-    hour: '2-digit', 
-    minute: '2-digit'
-  });
+  
+  // Handle descriptive time strings
+  if (typeof dateTime === 'string' && !dateTime.includes('T') && !dateTime.includes('-')) {
+    return dateTime; // Return as is for descriptive times like "早上十一点"
+  }
+  
+  try {
+    const dateObj = new Date(dateTime);
+    return dateObj.toLocaleString('zh-CN', { 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit', 
+      minute: '2-digit'
+    });
+  } catch (e) {
+    return dateTime; // Fallback to original string if parsing fails
+  }
 };
 
 // Format priority level
 const formatPriority = (priority) => {
+  if (!priority) return '';
+  
   const priorityMap = {
     high: '高',
     medium: '中',
-    low: '低'
+    low: '低',
+    '高': '高',
+    '中': '中', 
+    '低': '低'
   };
-  return priorityMap[priority.toLowerCase()] || priority;
+  
+  if (typeof priority === 'string') {
+    return priorityMap[priority.toLowerCase()] || priority;
+  }
+  
+  return priority.toString();
 };
 
 // Format frequency
@@ -334,5 +397,74 @@ const updateHabit = (habit, action) => {
   color: var(--app-gray-dark, #495057);
   margin-top: 4px;
   line-height: 1.4;
+}
+
+/* Subtasks styling */
+.subtasks {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+}
+
+.subtasks-header {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--app-dark, #343a40);
+}
+
+.subtask-item {
+  display: flex;
+  margin-bottom: 6px;
+  padding-left: 4px;
+}
+
+.subtask-checkbox {
+  margin-right: 8px;
+  color: var(--app-gray, #6c757d);
+}
+
+.subtask-icon {
+  font-size: 10px;
+}
+
+.subtask-content {
+  flex: 1;
+}
+
+.subtask-title {
+  font-size: 14px;
+  color: var(--app-gray-dark, #495057);
+}
+
+.subtask-time, .subtask-duration {
+  font-size: 12px;
+  color: var(--app-gray, #6c757d);
+  margin-top: 2px;
+}
+
+/* Habit plan styling */
+.habit-plan {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+}
+
+.habit-plan-header {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--app-dark, #343a40);
+}
+
+.habit-plan-steps {
+  padding-left: 20px;
+  margin: 0;
+}
+
+.habit-plan-steps li {
+  font-size: 14px;
+  color: var(--app-gray-dark, #495057);
+  margin-bottom: 4px;
 }
 </style> 

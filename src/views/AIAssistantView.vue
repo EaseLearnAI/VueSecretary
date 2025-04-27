@@ -8,53 +8,12 @@
           :key="index"
           :class="['message', message.type]"
         >
-          <div class="message-avatar">
-            <div v-if="message.type === 'ai'" class="ai-avatar">
-              <font-awesome-icon icon="robot" />
-            </div>
-            <div v-else class="user-avatar">
-              <font-awesome-icon icon="user" />
-            </div>
-          </div>
-          <div class="message-content">
-            <div v-if="message.type === 'ai' && message.isAnalyzing" class="typing-indicator">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <div v-else-if="message.type === 'ai' && message.taskCard" class="task-card">
-              <div class="task-card-header">
-                <font-awesome-icon :icon="message.taskCard.icon" class="task-card-icon" />
-                <div class="task-card-title">{{ message.taskCard.title }}</div>
-              </div>
-              <div class="task-card-details">
-                <div class="task-card-detail">
-                  <font-awesome-icon icon="calendar" class="detail-icon" />
-                  <span>{{ message.taskCard.date }}</span>
-                </div>
-                <div class="task-card-detail">
-                  <font-awesome-icon icon="clock" class="detail-icon" />
-                  <span>{{ message.taskCard.time }}</span>
-                </div>
-                <div v-if="message.taskCard.location" class="task-card-detail">
-                  <font-awesome-icon icon="location-dot" class="detail-icon" />
-                  <span>{{ message.taskCard.location }}</span>
-                </div>
-              </div>
-              <div class="task-card-actions">
-                <button class="task-card-btn" @click="editTask(message.taskCard)">
-                  <font-awesome-icon icon="pen" class="btn-icon" />
-                  编辑
-                </button>
-                <button class="task-card-btn primary" @click="importTask(message.taskCard)">
-                  <font-awesome-icon icon="check" class="btn-icon" />
-                  确认导入
-                </button>
-              </div>
-            </div>
-            <div v-else class="message-text" v-html="formatMessage(message.text)"></div>
-            <div v-if="message.type === 'ai'" class="message-time">{{ message.time }}</div>
-          </div>
+          <MessageItem 
+            :message="message"
+            @update:event="updateEvent"
+            @update:task="updateTask"
+            @update:habit="updateHabit"
+          />
         </div>
       </div>
       
@@ -81,7 +40,7 @@
             
             <button 
               class="send-btn"
-              :disabled="!userInput.trim()" 
+              :disabled="!userInput.trim() || isAnalyzing" 
               @click="sendMessage"
             >
               <font-awesome-icon icon="paper-plane" />
@@ -163,11 +122,14 @@
 import { ref, onMounted, nextTick, watch } from 'vue';
 import BaseLayout from '../components/layout/BaseLayout.vue';
 import ModalContainer from '../components/layout/ModalContainer.vue';
+import MessageItem from '../components/AIAssistant/MessageItem.vue';
+import { analyzeInput } from '../services/aiService';
 
 // Messages state
 const messages = ref([]);
 const userInput = ref('');
 const messagesContainer = ref(null);
+const isAnalyzing = ref(false);
 
 // Voice input state
 const isRecording = ref(false);
@@ -186,8 +148,8 @@ onMounted(() => {
   setTimeout(() => {
     addMessage({
       type: 'ai',
-      text: '你好！我是你的AI秘书，可以帮助你管理日程、创建任务，以及设置提醒。你可以直接告诉我你需要什么帮助，或者点击右上角的设置来个性化我的语音。',
-      time: formatTime(new Date())
+      content: '你好！我是你的AI秘书，可以帮助你管理日程、创建任务，以及设置提醒。你可以直接告诉我你需要什么帮助，或者点击右上角的设置来个性化我的语音。',
+      timestamp: new Date()
     });
   }, 500);
   
@@ -219,92 +181,162 @@ const addMessage = (message) => {
 };
 
 // Send a user message
-const sendMessage = () => {
-  if (!userInput.value.trim()) return;
+const sendMessage = async () => {
+  if (!userInput.value.trim() || isAnalyzing.value) return;
   
   // Add user message
   addMessage({
     type: 'user',
-    text: userInput.value
+    content: userInput.value,
+    timestamp: new Date()
   });
   
   // Clear input
   const input = userInput.value;
   userInput.value = '';
   
+  // Set analyzing state
+  isAnalyzing.value = true;
+  
   // Add AI analyzing indicator
   addMessage({
     type: 'ai',
-    isAnalyzing: true
+    isAnalyzing: true,
+    timestamp: new Date()
   });
   
-  // Simulate AI processing
-  setTimeout(() => {
+  try {
+    // Call AI service to analyze input
+    const analysisResult = await analyzeInput(input);
+    
     // Remove analyzing message
     messages.value.pop();
     
-    // Check if input looks like a task
-    if (input.includes('提醒') || input.includes('安排') || input.includes('会议') || input.includes('任务')) {
-      // Add task card
-      addMessage({
+    // Check if analysis was successful
+    if (analysisResult.success) {
+      // Create a structured message with the analysis results
+      const aiMessage = {
         type: 'ai',
-        text: '我已经为你解析了任务信息：',
-        time: formatTime(new Date()),
-        taskCard: createTaskFromInput(input)
-      });
+        content: '我已分析完成：',
+        timestamp: new Date(),
+        cards: {
+          events: analysisResult.data.events || [],
+          tasks: analysisResult.data.tasks || [],
+          habits: analysisResult.data.habits || []
+        }
+      };
+      
+      // Customize message based on analysis
+      if (analysisResult.data.events.length > 0 && analysisResult.data.tasks.length === 0 && analysisResult.data.habits.length === 0) {
+        aiMessage.content = '我已整理出您的事件安排：';
+      } else if (analysisResult.data.tasks.length > 0 && analysisResult.data.events.length === 0 && analysisResult.data.habits.length === 0) {
+        aiMessage.content = '我已为您拆解任务：';
+      } else if (analysisResult.data.habits.length > 0 && analysisResult.data.events.length === 0 && analysisResult.data.tasks.length === 0) {
+        aiMessage.content = '我已为您制定习惯养成计划：';
+      } else if (analysisResult.data.events.length === 0 && analysisResult.data.tasks.length === 0 && analysisResult.data.habits.length === 0) {
+        aiMessage.content = '我没有识别出任何事件、任务或习惯。您可以尝试更具体地描述，例如："明天上午10点开会"或"我想开始每天健身"。';
+        delete aiMessage.cards;
+      }
+      
+      addMessage(aiMessage);
     } else {
-      // Regular response
+      // Handle analysis failure
       addMessage({
         type: 'ai',
-        text: getAIResponse(input),
-        time: formatTime(new Date())
+        content: '抱歉，我在分析您的输入时遇到了问题。请您尝试重新描述一下，或者换一种表达方式。',
+        timestamp: new Date()
       });
+      console.error('Analysis error:', analysisResult.error);
     }
-  }, 1500);
-};
-
-// Generate AI response based on user input
-const getAIResponse = (input) => {
-  // Simple response logic for demo
-  if (input.includes('你好') || input.includes('嗨') || input.includes('hi')) {
-    return '你好！有什么我可以帮你的吗？';
-  } else if (input.includes('天气')) {
-    return '今天天气晴朗，温度25°C，是个适合外出的好日子。';
-  } else if (input.includes('谢谢')) {
-    return '不客气，随时为你服务！';
-  } else {
-    return '我理解了。你可以尝试告诉我需要创建的任务，例如："提醒我明天下午3点参加项目会议"，我会帮你设置。';
+  } catch (error) {
+    // Handle API errors
+    console.error('API error:', error);
+    addMessage({
+      type: 'ai',
+      content: '抱歉，服务暂时不可用。请稍后再试。',
+      timestamp: new Date()
+    });
+  } finally {
+    // Reset analyzing state
+    isAnalyzing.value = false;
   }
 };
 
-// Create a task object from user input
-const createTaskFromInput = (input) => {
-  // In a real app, this would use NLP to extract task details
-  // For demo purposes, we'll use a simple example
+// Event and task update handlers
+const updateEvent = (eventData) => {
+  console.log('Event update:', eventData);
   
-  let title, date, time, location, icon;
-  
-  if (input.includes('会议')) {
-    title = '项目会议';
-    date = '明天';
-    time = '15:00 - 16:30';
-    location = '会议室A';
-    icon = 'users';
-  } else if (input.includes('提醒')) {
-    title = '重要提醒';
-    date = '今天';
-    time = '18:00';
-    location = '';
-    icon = 'bell';
+  if (eventData.action === 'delete') {
+    // Show confirmation message
+    addMessage({
+      type: 'ai',
+      content: `已删除事件「${eventData.title}」`,
+      timestamp: new Date()
+    });
+  } else if (eventData.action === 'edit') {
+    // In a real app, this would open an edit form or redirect to event edit page
+    console.log('Editing event:', eventData);
   } else {
-    title = '新任务';
-    date = '今天';
-    time = '12:00';
-    location = '';
-    icon = 'check-circle';
+    // Import event
+    addMessage({
+      type: 'ai',
+      content: `✓ 已将事件「${eventData.title}」添加到您的日程安排！`,
+      timestamp: new Date()
+    });
   }
+};
+
+const updateTask = (taskData) => {
+  console.log('Task update:', taskData);
   
-  return { title, date, time, location, icon };
+  if (taskData.action === 'delete') {
+    // Show confirmation message
+    addMessage({
+      type: 'ai',
+      content: `已删除任务「${taskData.title}」`,
+      timestamp: new Date()
+    });
+  } else if (taskData.action === 'edit') {
+    // In a real app, this would open an edit form or redirect to task edit page
+    console.log('Editing task:', taskData);
+  } else if (taskData.action === 'complete') {
+    // Mark task as complete
+    addMessage({
+      type: 'ai',
+      content: `✓ 已将任务「${taskData.title}」标记为完成！`,
+      timestamp: new Date()
+    });
+  } else {
+    // Import task
+    addMessage({
+      type: 'ai',
+      content: `✓ 已将任务「${taskData.title}」添加到您的待办事项！`,
+      timestamp: new Date()
+    });
+  }
+};
+
+const updateHabit = (habitData) => {
+  console.log('Habit update:', habitData);
+  
+  if (habitData.action === 'delete') {
+    // Show confirmation message
+    addMessage({
+      type: 'ai',
+      content: `已删除习惯「${habitData.title}」`,
+      timestamp: new Date()
+    });
+  } else if (habitData.action === 'edit') {
+    // In a real app, this would open an edit form or redirect to habit edit page
+    console.log('Editing habit:', habitData);
+  } else {
+    // Import habit
+    addMessage({
+      type: 'ai',
+      content: `✓ 已将习惯「${habitData.title}」添加到您的习惯追踪！从今天开始，我会帮您记录这个习惯的养成进度。`,
+      timestamp: new Date()
+    });
+  }
 };
 
 // Voice input toggling
@@ -362,8 +394,8 @@ const createCustomVoice = () => {
   // Show loading state
   const processingMessage = {
     type: 'ai',
-    text: '正在处理你的语音样本...',
-    time: formatTime(new Date())
+    content: '正在处理你的语音样本...',
+    timestamp: new Date()
   };
   addMessage(processingMessage);
   
@@ -373,8 +405,8 @@ const createCustomVoice = () => {
     const index = messages.value.indexOf(processingMessage);
     messages.value[index] = {
       type: 'ai',
-      text: `✓ 成功创建个性化语音「${voiceName.value}」！从现在起，我会用这个声音与你交流。`,
-      time: formatTime(new Date())
+      content: `✓ 成功创建个性化语音「${voiceName.value}」！从现在起，我会用这个声音与你交流。`,
+      timestamp: new Date()
     };
     
     // Set as having custom voice
@@ -388,33 +420,6 @@ const createCustomVoice = () => {
     voiceFile.value = null;
     voiceName.value = '';
   }, 3000);
-};
-
-// Task actions
-const editTask = (task) => {
-  console.log('Editing task:', task);
-  // In a real app, this would open an edit form
-};
-
-const importTask = (task) => {
-  console.log('Importing task:', task);
-  
-  // Add confirmation message
-  addMessage({
-    type: 'ai',
-    text: `✓ 已将「${task.title}」添加到你的任务列表！`,
-    time: formatTime(new Date())
-  });
-};
-
-// Helper functions
-const formatTime = (date) => {
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-};
-
-const formatMessage = (text) => {
-  // Convert links, etc.
-  return text;
 };
 </script>
 
