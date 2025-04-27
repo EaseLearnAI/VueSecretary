@@ -5,34 +5,55 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/tasks'
+      redirect: '/login'
+    },
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('../views/login.vue')
     },
     {
       path: '/tasks',
       name: 'tasks',
-      component: () => import('../views/TasksView.vue')
+      component: () => import('../views/TasksView.vue'),
+      meta: { requiresAuth: true }
     },
     {
       path: '/habits',
       name: 'habits',
-      component: () => import('../views/HabitsView.vue')
+      component: () => import('../views/HabitsView.vue'),
+      meta: { requiresAuth: true }
     },
     {
       path: '/ai-assistant',
       name: 'ai-assistant',
-      component: () => import('../views/AIAssistantView.vue')
+      component: () => import('../views/AIAssistantView.vue'),
+      meta: { requiresAuth: true }
     },
     {
       path: '/calendar',
       name: 'calendar',
-      component: () => import('../views/CalendarView.vue')
+      component: () => import('../views/CalendarView.vue'),
+      meta: { requiresAuth: true }
     },
     {
       path: '/stats',
       name: 'stats',
-      component: () => import('../views/StatsView.vue')
+      component: () => import('../views/StatsView.vue'),
+      meta: { requiresAuth: true }
     }
   ]
+})
+
+// Navigation guard for auth
+router.beforeEach((to, from, next) => {
+  const isAuthenticated = localStorage.getItem('user') !== null
+  
+  if (to.meta.requiresAuth && !isAuthenticated) {
+    next('/login')
+  } else {
+    next()
+  }
 })
 
 export default router 

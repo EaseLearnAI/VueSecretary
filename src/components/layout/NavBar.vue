@@ -12,14 +12,23 @@
       </div>
       <div class="nav-text">{{ item.label }}</div>
     </router-link>
+    
+    <!-- Logout button -->
+    <div class="nav-item logout-item" @click="logout">
+      <div class="nav-icon">
+        <font-awesome-icon icon="sign-out-alt" />
+      </div>
+      <div class="nav-text">退出</div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 const route = useRoute();
+const router = useRouter();
 const currentRoute = computed(() => route.path);
 const isMobileView = ref(window.innerWidth < 768);
 
@@ -33,6 +42,12 @@ const navItems = [
 
 const handleResize = () => {
   isMobileView.value = window.innerWidth < 768;
+};
+
+// Logout function
+const logout = () => {
+  localStorage.removeItem('user');
+  router.push('/login');
 };
 
 onMounted(() => {
@@ -99,6 +114,15 @@ onUnmounted(() => {
   width: 100%;
   padding: 15px 0;
   margin-bottom: 10px;
+}
+
+.desktop-nav .logout-item {
+  margin-top: auto;
+  color: var(--app-danger);
+}
+
+.mobile-nav .logout-item {
+  position: relative;
 }
 
 .nav-icon {

@@ -1,5 +1,6 @@
 import './assets/main.css'
 import './assets/css/variables.css'
+import './debug.js' // Debug script for network monitoring
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'

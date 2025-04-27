@@ -1,5 +1,28 @@
 <script setup>
+import { ref, computed, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import NavBar from './components/layout/NavBar.vue';
+
+const route = useRoute();
+const isAuthenticated = ref(false);
+
+// Check if user is authenticated
+const checkAuth = () => {
+  isAuthenticated.value = localStorage.getItem('user') !== null;
+};
+
+// Check if navbar should be shown (auth routes except login)
+const showNavBar = computed(() => {
+  return isAuthenticated.value && route.name !== 'login';
+});
+
+// Check auth status on mount and when localStorage changes
+onMounted(() => {
+  checkAuth();
+  
+  // Listen for storage events in case user logs in/out in another tab
+  window.addEventListener('storage', checkAuth);
+});
 </script>
 
 <template>
@@ -9,8 +32,8 @@ import NavBar from './components/layout/NavBar.vue';
         <component :is="Component" />
       </transition>
     </router-view>
-    <NavBar />
-    </div>
+    <NavBar v-if="showNavBar" />
+  </div>
 </template>
 
 <style>
