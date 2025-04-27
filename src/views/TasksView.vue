@@ -21,8 +21,15 @@
       </button>
     </div>
     
-    <TaskList v-if="viewMode === 'list'" :tasks="taskGroups" @task-clicked="selectTask" />
-    <TaskQuadrant v-else :tasks="flatTasks" @task-clicked="selectTask" />
+    <div v-if="isLoading" class="loading-indicator">
+      <i class="el-icon-loading"></i>
+      <span>加载中...</span>
+    </div>
+    
+    <template v-else>
+      <TaskList v-if="viewMode === 'list'" :tasks="tasksStore.taskGroups" @task-clicked="selectTask" />
+      <TaskQuadrant v-else :tasks="tasksStore.flatTasks" @task-clicked="selectTask" />
+    </template>
     
     <!-- Add Task Modal -->
     <ModalContainer v-model="showAddTaskModal" title="新建任务">
@@ -34,7 +41,7 @@
         <el-form-item label="所属任务集">
           <el-select v-model="newTask.groupId" placeholder="选择任务集" style="width: 100%">
             <el-option
-              v-for="group in taskGroups"
+              v-for="group in tasksStore.taskGroups"
               :key="group.id"
               :label="group.name"
               :value="group.id"
@@ -67,7 +74,10 @@
       
       <template #footer>
         <button class="btn btn-secondary" @click="showAddTaskModal = false">取消</button>
-        <button class="btn btn-primary" @click="addTask">创建</button>
+        <button class="btn btn-primary" @click="addTask" :disabled="isAddingTask">
+          <span v-if="isAddingTask">创建中...</span>
+          <span v-else>创建</span>
+        </button>
       </template>
     </ModalContainer>
     
@@ -77,58 +87,34 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useTasksStore } from '../stores/tasksStore';
 import BaseLayout from '../components/layout/BaseLayout.vue';
 import ModalContainer from '../components/layout/ModalContainer.vue';
 import TaskList from '../components/tasks/TaskList.vue';
 import TaskQuadrant from '../components/tasks/TaskQuadrant.vue';
 import TaskPomodoro from '../components/tasks/TaskPomodoro.vue';
 
+// Initialize the tasks store
+const tasksStore = useTasksStore();
+
 // View mode switching
 const viewMode = ref('list');
 
-// Tasks data
-const taskGroups = ref([
-  {
-    id: 1,
-    name: '工作项目',
-    tasks: [
-      { id: 1, name: '完成设计原型', completed: false, priority: 'high', dueDate: new Date('2023-06-10 14:00') },
-      { id: 2, name: '前端开发', completed: true, priority: 'medium', dueDate: new Date('2023-06-08 18:00') },
-      { id: 3, name: '后端 API 集成', completed: false, priority: 'high', dueDate: new Date('2023-06-15 16:00') }
-    ]
-  },
-  {
-    id: 2,
-    name: '个人',
-    tasks: [
-      { id: 4, name: '购物清单', completed: false, priority: 'low', dueDate: new Date('2023-06-12 12:00') },
-      { id: 5, name: '家庭聚会', completed: false, priority: 'medium', dueDate: new Date('2023-06-18 19:00') }
-    ]
-  },
-  {
-    id: 3,
-    name: '学习',
-    tasks: [
-      { id: 6, name: '学习 Vue 3', completed: true, priority: 'high', dueDate: new Date('2023-06-05 10:00') },
-      { id: 7, name: '阅读技术文章', completed: false, priority: 'low', dueDate: new Date('2023-06-20 22:00') }
-    ]
-  }
-]);
+// Loading state
+const isLoading = ref(true);
+const isAddingTask = ref(false);
 
-// Create flat task list for quadrant view
-const flatTasks = computed(() => {
-  const tasks = [];
-  taskGroups.value.forEach(group => {
-    group.tasks.forEach(task => {
-      tasks.push({
-        ...task,
-        groupId: group.id,
-        groupName: group.name
-      });
-    });
-  });
-  return tasks;
+// Load tasks on component mount
+onMounted(async () => {
+  try {
+    await tasksStore.fetchTasks();
+  } catch (error) {
+    console.error('Failed to load tasks:', error);
+    // TODO: Show error message to user
+  } finally {
+    isLoading.value = false;
+  }
 });
 
 // Task modals
@@ -144,7 +130,7 @@ const newTask = ref({
 const openAddTaskModal = () => {
   newTask.value = {
     name: '',
-    groupId: taskGroups.value.length > 0 ? taskGroups.value[0].id : 'new',
+    groupId: tasksStore.taskGroups.length > 0 ? tasksStore.taskGroups[0].id : 'new',
     newGroupName: '',
     priority: 'medium',
     dueDate: null
@@ -152,42 +138,30 @@ const openAddTaskModal = () => {
   showAddTaskModal.value = true;
 };
 
-const addTask = () => {
+const addTask = async () => {
   if (!newTask.value.name.trim()) {
-    return; // TODO: Show validation message
+    // TODO: Show validation message
+    return;
   }
   
-  let groupId = newTask.value.groupId;
+  // Set adding state
+  isAddingTask.value = true;
   
-  // Create new group if needed
-  if (groupId === 'new') {
-    if (!newTask.value.newGroupName.trim()) {
-      return; // TODO: Show validation message
+  try {
+    // Save task using store method
+    const result = await tasksStore.saveTask(newTask.value);
+    
+    if (result.success) {
+      showAddTaskModal.value = false;
+    } else {
+      // TODO: Show error message
     }
-    
-    const newGroupId = taskGroups.value.length + 1;
-    taskGroups.value.push({
-      id: newGroupId,
-      name: newTask.value.newGroupName,
-      tasks: []
-    });
-    
-    groupId = newGroupId;
+  } catch (error) {
+    console.error('Failed to add task:', error);
+    // TODO: Show error message
+  } finally {
+    isAddingTask.value = false;
   }
-  
-  // Add new task to the group
-  const taskId = Math.max(...flatTasks.value.map(t => t.id), 0) + 1;
-  const targetGroup = taskGroups.value.find(g => g.id === groupId);
-  
-  targetGroup.tasks.push({
-    id: taskId,
-    name: newTask.value.name,
-    completed: false,
-    priority: newTask.value.priority,
-    dueDate: newTask.value.dueDate
-  });
-  
-  showAddTaskModal.value = false;
 };
 
 // Pomodoro handling
@@ -223,6 +197,15 @@ const selectTask = (task) => {
   background-color: white;
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 0;
+  color: var(--text-secondary);
+  gap: 8px;
 }
 
 /* Dark mode styles */
