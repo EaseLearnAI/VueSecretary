@@ -43,7 +43,7 @@
           </div>
           <div class="task-actions">
             <el-dropdown trigger="click" @command="handleTaskAction($event, group.id, task.id)">
-              <font-awesome-icon icon="ellipsis-vertical" class="more-icon" />
+              <font-awesome-icon icon="ellipsis-vertical" class="more-icon" role="button" focusable="true" aria-label="任务操作" />
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="edit">编辑</el-dropdown-item>
@@ -74,7 +74,7 @@ const props = defineProps({
   }
 });
 
-defineEmits(['task-clicked']);
+const emit = defineEmits(['task-clicked', 'edit-task']);
 
 // Group expansion handling
 const expandedGroups = ref([1]); // Initially expand the first group
@@ -130,13 +130,25 @@ const updateTaskStatus = (task) => {
 
 const handleTaskAction = (action, groupId, taskId) => {
   if (action === 'edit') {
-    // Open edit modal (would be implemented in a real app)
-    console.log(`Edit task ${taskId} in group ${groupId}`);
+    // Find the task and emit edit event with the task data
+    const groupIndex = props.tasks.findIndex(g => g._id === groupId || g.id === groupId);
+    if (groupIndex !== -1) {
+      const taskIndex = props.tasks[groupIndex].tasks.findIndex(t => t._id === taskId || t.id === taskId);
+      if (taskIndex !== -1) {
+        const task = props.tasks[groupIndex].tasks[taskIndex];
+        console.log(`Edit task ${taskId} in group ${groupId}`);
+        emit('edit-task', { 
+          ...task, 
+          groupId: props.tasks[groupIndex]._id || props.tasks[groupIndex].id,
+          groupName: props.tasks[groupIndex].name
+        });
+      }
+    }
   } else if (action === 'delete') {
     // Confirm and delete (would have a confirmation in a real app)
-    const groupIndex = props.tasks.findIndex(g => g.id === groupId);
+    const groupIndex = props.tasks.findIndex(g => g._id === groupId || g.id === groupId);
     if (groupIndex !== -1) {
-      const taskIndex = props.tasks[groupIndex].tasks.findIndex(t => t.id === taskId);
+      const taskIndex = props.tasks[groupIndex].tasks.findIndex(t => t._id === taskId || t.id === taskId);
       if (taskIndex !== -1) {
         props.tasks[groupIndex].tasks.splice(taskIndex, 1);
       }

@@ -7,7 +7,7 @@
         事件
       </h3>
       <div class="cards-container">
-        <div v-for="(event, index) in events" :key="index" class="card event-card">
+        <div v-for="(event, index) in events" :key="index" class="card event-card" :class="{ 'delete-animation': event.isDeleting }">
           <div class="card-header">
             <span class="card-title">{{ event.title || event.content }}</span>
             <div class="card-actions">
@@ -39,7 +39,17 @@
           </div>
         </div>
       </div>
+      
+      <!-- Bulk import button for events -->
+      <div class="bulk-import-container">
+        <button class="bulk-import-btn" @click="bulkImportEvents">
+          <font-awesome-icon icon="calendar-plus" class="bulk-import-icon" />
+          一键导入所有事件
+        </button>
+      </div>
     </div>
+
+    <div class="section-divider" v-if="(events && events.length > 0) && (tasks && tasks.length > 0)"></div>
 
     <!-- Tasks Cards -->
     <div v-if="tasks && tasks.length > 0" class="card-section">
@@ -95,9 +105,29 @@
               </div>
             </div>
           </div>
+          <div class="card-footer">
+            <button class="card-btn" @click="updateTask(task, 'complete')" v-if="!task.completed">
+              <font-awesome-icon icon="check" class="btn-icon" />
+              标记完成
+            </button>
+            <button class="card-btn primary" @click="updateTask(task, 'import')">
+              <font-awesome-icon icon="plus" class="btn-icon" />
+              添加到任务
+            </button>
+          </div>
         </div>
       </div>
+      
+      <!-- Bulk import button for tasks -->
+      <div class="bulk-import-container">
+        <button class="bulk-import-btn" @click="bulkImportTasks">
+          <font-awesome-icon icon="tasks" class="bulk-import-icon" />
+          一键导入所有任务
+        </button>
+      </div>
     </div>
+
+    <div class="section-divider" v-if="(tasks && tasks.length > 0) && (habits && habits.length > 0)"></div>
 
     <!-- Habits Cards -->
     <div v-if="habits && habits.length > 0" class="card-section">
@@ -141,7 +171,21 @@
               </ul>
             </div>
           </div>
+          <div class="card-footer">
+            <button class="card-btn primary" @click="updateHabit(habit, 'import')">
+              <font-awesome-icon icon="plus" class="btn-icon" />
+              添加到习惯
+            </button>
+          </div>
         </div>
+      </div>
+      
+      <!-- Bulk import button for habits -->
+      <div class="bulk-import-container">
+        <button class="bulk-import-btn" @click="bulkImportHabits">
+          <font-awesome-icon icon="sync" class="bulk-import-icon" />
+          一键导入所有习惯
+        </button>
       </div>
     </div>
   </div>
@@ -259,7 +303,17 @@ const formatFrequency = (frequency) => {
 
 // Event handlers
 const updateEvent = (event, action) => {
-  emit('update:event', { ...event, action });
+  if (action === 'delete') {
+    // Add isDeleting flag to trigger animation
+    event.isDeleting = true;
+    
+    // Wait for animation to complete before emitting event
+    setTimeout(() => {
+      emit('update:event', { ...event, action });
+    }, 300);
+  } else {
+    emit('update:event', { ...event, action });
+  }
 };
 
 const updateTask = (task, action) => {
@@ -269,21 +323,53 @@ const updateTask = (task, action) => {
 const updateHabit = (habit, action) => {
   emit('update:habit', { ...habit, action });
 };
+
+// Bulk import handlers
+const bulkImportEvents = () => {
+  emit('update:event', { action: 'bulk-import' });
+};
+
+const bulkImportTasks = () => {
+  // Get all tasks including those with subtasks
+  const tasksToImport = props.tasks.map(task => {
+    // Create a clean copy of the task
+    const taskCopy = { ...task, action: 'bulk-import' };
+    
+    // Make sure subtasks are properly formatted
+    if (taskCopy.subtasks && taskCopy.subtasks.length > 0) {
+      taskCopy.subtasks = taskCopy.subtasks.map(subtask => ({
+        ...subtask,
+        // Ensure correct properties are present
+        title: subtask.title || subtask.content,
+        scheduledTime: subtask.scheduledTime || null,
+        estimatedDuration: subtask.estimatedDuration || null
+      }));
+    }
+    
+    return taskCopy;
+  });
+  
+  emit('update:task', { action: 'bulk-import', tasks: tasksToImport });
+};
+
+const bulkImportHabits = () => {
+  emit('update:habit', { action: 'bulk-import' });
+};
 </script>
 
 <style scoped>
 .result-cards {
   width: 100%;
-  margin: 12px 0;
+  margin: 8px 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .card-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .section-title {
@@ -303,16 +389,17 @@ const updateHabit = (habit, action) => {
 .cards-container {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .card {
   background-color: white;
   border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.08);
   transition: all 0.2s ease;
+  width: 100%;
 }
 
 .card:hover {
@@ -337,13 +424,13 @@ const updateHabit = (habit, action) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   background-color: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .card-title {
   font-weight: 600;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--app-dark, #343a40);
 }
 
@@ -353,29 +440,30 @@ const updateHabit = (habit, action) => {
 }
 
 .action-btn {
-  background: none;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.8);
   border: none;
   color: var(--app-gray, #6c757d);
   cursor: pointer;
   font-size: 14px;
-  padding: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: 16px;
   transition: all 0.2s ease;
 }
 
 .action-btn:hover {
   color: var(--app-primary, #007bff);
-  background-color: rgba(0, 123, 255, 0.08);
+  background-color: rgba(255, 255, 255, 0.95);
 }
 
 .card-content {
-  padding: 12px 16px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .card-detail {
@@ -388,39 +476,106 @@ const updateHabit = (habit, action) => {
 .detail-icon {
   margin-right: 8px;
   color: var(--app-gray, #6c757d);
-  font-size: 12px;
-  width: 12px;
+  width: 16px;
 }
 
 .card-description {
   font-size: 14px;
   color: var(--app-gray-dark, #495057);
-  margin-top: 4px;
-  line-height: 1.4;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.card-footer {
+  display: flex;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.card-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 12px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+  color: var(--app-gray-dark, #495057);
+}
+
+.card-btn:not(:last-child) {
+  border-right: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.card-btn:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+.card-btn.primary {
+  color: var(--app-primary, #007bff);
+  font-weight: 500;
+}
+
+.btn-icon {
+  margin-right: 6px;
+  font-size: 14px;
+}
+
+/* Bulk import button */
+.bulk-import-container {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+.bulk-import-btn {
+  background-color: var(--app-primary, #007bff);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.bulk-import-btn:hover {
+  background-color: var(--app-primary-dark, #0069d9);
+}
+
+.bulk-import-icon {
+  font-size: 14px;
 }
 
 /* Subtasks styling */
 .subtasks {
   margin-top: 8px;
-  padding-top: 8px;
+  padding-top: 10px;
   border-top: 1px dashed rgba(0, 0, 0, 0.1);
 }
 
 .subtasks-header {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   color: var(--app-dark, #343a40);
 }
 
 .subtask-item {
   display: flex;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   padding-left: 4px;
 }
 
 .subtask-checkbox {
-  margin-right: 8px;
+  margin-right: 10px;
   color: var(--app-gray, #6c757d);
 }
 
@@ -440,20 +595,20 @@ const updateHabit = (habit, action) => {
 .subtask-time, .subtask-duration {
   font-size: 12px;
   color: var(--app-gray, #6c757d);
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 /* Habit plan styling */
 .habit-plan {
   margin-top: 8px;
-  padding-top: 8px;
+  padding-top: 10px;
   border-top: 1px dashed rgba(0, 0, 0, 0.1);
 }
 
 .habit-plan-header {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   color: var(--app-dark, #343a40);
 }
 
@@ -465,6 +620,94 @@ const updateHabit = (habit, action) => {
 .habit-plan-steps li {
   font-size: 14px;
   color: var(--app-gray-dark, #495057);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .card {
+    background-color: #2C2C2E;
+    border-color: #3A3A3C;
+  }
+  
+  .card-header {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-bottom-color: #3A3A3C;
+  }
+  
+  .card-title {
+    color: #FFFFFF;
+  }
+  
+  .action-btn {
+    background: rgba(0, 0, 0, 0.3);
+    color: #AAAAAA;
+  }
+  
+  .action-btn:hover {
+    background-color: rgba(0, 0, 0, 0.5);
+    color: #FFFFFF;
+  }
+  
+  .card-detail, .card-description, .subtask-title, .habit-plan-steps li {
+    color: #CCCCCC;
+  }
+  
+  .detail-icon, .subtask-icon, .subtask-time, .subtask-duration {
+    color: #999999;
+  }
+  
+  .card-footer {
+    border-top-color: #3A3A3C;
+  }
+  
+  .card-btn {
+    color: #CCCCCC;
+  }
+  
+  .card-btn:not(:last-child) {
+    border-right-color: #3A3A3C;
+  }
+  
+  .card-btn:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  .subtasks, .habit-plan {
+    border-top-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .subtasks-header, .habit-plan-header {
+    color: #FFFFFF;
+  }
+  
+  .section-divider {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.section-divider {
+  height: 1px;
+  background-color: rgba(0, 0, 0, 0.1);
+  margin: 4px 0;
+}
+
+.delete-animation {
+  animation: slideOut 0.3s ease forwards;
+}
+
+@keyframes slideOut {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-100%);
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
 }
 </style> 

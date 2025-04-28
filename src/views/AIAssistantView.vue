@@ -17,6 +17,12 @@
         </div>
       </div>
       
+      <!-- Import success toast notification -->
+      <div class="toast-notification" :class="{ 'visible': showToast }">
+        <font-awesome-icon :icon="toastIcon" class="toast-icon" />
+        <span>{{ toastMessage }}</span>
+      </div>
+      
       <!-- Input area -->
       <div class="input-container">
         <div class="input-area">
@@ -54,6 +60,100 @@
         </div>
       </div>
     </div>
+    
+    <!-- Edit Event Modal -->
+    <ModalContainer v-model="showEditEventModal" :title="isEditingEvent ? '编辑事件' : '新建事件'">
+      <el-form :model="editingEvent" label-position="top">
+        <el-form-item label="事件名称">
+          <el-input v-model="editingEvent.title" placeholder="输入事件名称" />
+        </el-form-item>
+        
+        <el-form-item label="开始时间">
+          <el-date-picker
+            v-model="editingEvent.startTime"
+            type="datetime"
+            placeholder="选择开始时间"
+            style="width: 100%"
+          />
+        </el-form-item>
+        
+        <el-form-item label="结束时间">
+          <el-date-picker
+            v-model="editingEvent.endTime"
+            type="datetime"
+            placeholder="选择结束时间"
+            style="width: 100%"
+          />
+        </el-form-item>
+        
+        <el-form-item label="地点">
+          <el-input v-model="editingEvent.location" placeholder="输入地点" />
+        </el-form-item>
+        
+        <el-form-item label="优先级">
+          <el-select v-model="editingEvent.priority" placeholder="选择优先级" style="width: 100%">
+            <el-option label="高优先级" value="high" />
+            <el-option label="中优先级" value="medium" />
+            <el-option label="低优先级" value="low" />
+          </el-select>
+        </el-form-item>
+        
+        <el-form-item label="备注">
+          <el-input 
+            v-model="editingEvent.description" 
+            type="textarea" 
+            placeholder="输入事件备注"
+            rows="3"
+          />
+        </el-form-item>
+      </el-form>
+      
+      <div v-if="editEventError" class="form-error">
+        {{ editEventError }}
+      </div>
+      
+      <template #footer>
+        <button class="btn btn-secondary" @click="closeEditEventModal">取消</button>
+        <button class="btn btn-primary" @click="saveEditedEvent" :disabled="isEditingEventSaving">
+          <span v-if="isEditingEventSaving">保存中...</span>
+          <span v-else>保存</span>
+        </button>
+      </template>
+    </ModalContainer>
+    
+    <!-- Time conflict confirmation modal -->
+    <ModalContainer v-model="showConflictModal" title="时间冲突">
+      <div class="conflict-modal-content">
+        <p class="conflict-info">
+          <font-awesome-icon icon="exclamation-triangle" class="conflict-icon" />
+          发现以下时间冲突:
+        </p>
+        <div class="conflict-list">
+          <div 
+            v-for="(conflict, index) in conflictingTasks" 
+            :key="index" 
+            class="conflict-item"
+          >
+            <div class="conflict-task-name">{{ conflict.name }}</div>
+            <div class="conflict-time">
+              <font-awesome-icon icon="clock" class="conflict-time-icon" />
+              {{ formatDate(conflict.time || conflict.dueDate) }}
+            </div>
+          </div>
+        </div>
+        <p class="conflict-question">是否仍要导入这些任务？</p>
+      </div>
+      
+      <template #footer>
+        <button class="btn btn-secondary" @click="closeConflictModal">取消</button>
+        <button 
+          class="btn btn-primary" 
+          @click="forceImportTasks"
+        >
+          强制导入
+        </button>
+      </template>
+    </ModalContainer>
     
     <!-- Voice customization modal -->
     <ModalContainer v-model="showVoiceModal" title="创建个性化语音助手">
@@ -124,12 +224,44 @@ import BaseLayout from '../components/layout/BaseLayout.vue';
 import ModalContainer from '../components/layout/ModalContainer.vue';
 import MessageItem from '../components/AIAssistant/MessageItem.vue';
 import { analyzeInput } from '../services/aiService';
+import { useTasksStore } from '../stores/tasksStore';
+import axios from 'axios';
+
+// Initialize tasks store
+const tasksStore = useTasksStore();
 
 // Messages state
 const messages = ref([]);
 const userInput = ref('');
 const messagesContainer = ref(null);
 const isAnalyzing = ref(false);
+
+// Toast notification state
+const showToast = ref(false);
+const toastMessage = ref('');
+const toastIcon = ref('check-circle');
+const toastTimer = ref(null);
+
+// Edit Event Modal state
+const showEditEventModal = ref(false);
+const editingEvent = ref({
+  id: '',
+  title: '',
+  startTime: null,
+  endTime: null,
+  location: '',
+  priority: 'medium',
+  description: ''
+});
+const isEditingEvent = ref(false);
+const isEditingEventSaving = ref(false);
+const editEventError = ref(null);
+
+// Task conflict state
+const showConflictModal = ref(false);
+const conflictingTasks = ref([]);
+const pendingTasksToImport = ref(null);
+const forceImport = ref(false);
 
 // Voice input state
 const isRecording = ref(false);
@@ -174,6 +306,166 @@ watch(messages, () => {
     }
   });
 });
+
+// Format date helper function
+const formatDate = (date) => {
+  if (!date) return '';
+  
+  // Handle date strings that are not in ISO format
+  if (typeof date === 'string' && !date.includes('T') && !date.includes('-')) {
+    return date; // Return as is for descriptive dates like "明天" or "周五之前"
+  }
+  
+  try {
+    const dateObj = new Date(date);
+    return dateObj.toLocaleDateString('zh-CN', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    return date; // Fallback to original string if parsing fails
+  }
+};
+
+// Show toast notification
+const showToastNotification = (message, icon = 'check-circle', duration = 2000) => {
+  // Clear any existing timer
+  if (toastTimer.value) {
+    clearTimeout(toastTimer.value);
+  }
+  
+  // Set toast content
+  toastMessage.value = message;
+  toastIcon.value = icon;
+  showToast.value = true;
+  
+  // Auto-hide after duration
+  toastTimer.value = setTimeout(() => {
+    showToast.value = false;
+  }, duration);
+};
+
+// Handle event editing
+const openEditEventModal = (event) => {
+  // Reset error
+  editEventError.value = null;
+  
+  // Set editing mode
+  isEditingEvent.value = true;
+  
+  // Convert string dates to Date objects if needed
+  const startTime = event.startTime ? new Date(event.startTime) : null;
+  const endTime = event.endTime ? new Date(event.endTime) : null;
+  
+  // Populate the form with event data
+  editingEvent.value = {
+    id: event.id,
+    title: event.title || '',
+    startTime: startTime,
+    endTime: endTime,
+    location: event.location || '',
+    priority: event.priority || 'medium',
+    description: event.description || ''
+  };
+  
+  // Show the modal
+  showEditEventModal.value = true;
+};
+
+const closeEditEventModal = () => {
+  showEditEventModal.value = false;
+  editEventError.value = null;
+  // Reset form after closing
+  editingEvent.value = {
+    id: '',
+    title: '',
+    startTime: null,
+    endTime: null,
+    location: '',
+    priority: 'medium',
+    description: ''
+  };
+  isEditingEvent.value = false;
+};
+
+const saveEditedEvent = async () => {
+  if (!editingEvent.value.title.trim()) {
+    editEventError.value = '请输入事件名称';
+    return;
+  }
+  
+  if (!editingEvent.value.startTime) {
+    editEventError.value = '请选择开始时间';
+    return;
+  }
+  
+  isEditingEventSaving.value = true;
+  
+  try {
+    // In a real app, this would call an API to update the event
+    console.log('Saving edited event:', editingEvent.value);
+    
+    // Update the event in the messages
+    if (isEditingEvent.value && editingEvent.value.id) {
+      // Find and update the event in the messages array
+      updateEventInMessages(editingEvent.value);
+    }
+    
+    // Show success notification
+    showToastNotification('事件已更新', 'check-circle');
+    closeEditEventModal();
+    
+    // Add a message to confirm the update
+    addMessage({
+      type: 'ai',
+      content: `✓ 已更新事件「${editingEvent.value.title}」！`,
+      timestamp: new Date()
+    });
+    
+    isEditingEventSaving.value = false;
+  } catch (error) {
+    console.error('Error saving event:', error);
+    editEventError.value = '保存事件失败，请重试';
+    isEditingEventSaving.value = false;
+  }
+};
+
+// Function to update event in messages array
+const updateEventInMessages = (updatedEvent) => {
+  messages.value.forEach(message => {
+    if (message.cards && message.cards.events) {
+      const eventIndex = message.cards.events.findIndex(event => 
+        event.id === updatedEvent.id
+      );
+      
+      if (eventIndex !== -1) {
+        // Update the event with new data
+        message.cards.events[eventIndex] = {
+          ...message.cards.events[eventIndex],
+          ...updatedEvent
+        };
+      }
+    }
+  });
+};
+
+// Handle time conflicts
+const closeConflictModal = () => {
+  showConflictModal.value = false;
+  conflictingTasks.value = [];
+  pendingTasksToImport.value = null;
+};
+
+const forceImportTasks = async () => {
+  if (!pendingTasksToImport.value) return;
+  
+  forceImport.value = true;
+  await importTasks(pendingTasksToImport.value);
+  closeConflictModal();
+};
 
 // Helper function to add a message
 const addMessage = (message) => {
@@ -262,6 +554,186 @@ const sendMessage = async () => {
   }
 };
 
+// Task import function
+const importTasks = async (tasks) => {
+  try {
+    // Prepare API endpoint and request config
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
+    const config = {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+      }
+    };
+    
+    // Track success and failures
+    let successCount = 0;
+    let failureCount = 0;
+    
+    // Process tasks - identify parent tasks and subtasks
+    for (const task of tasks) {
+      try {
+        // Check if this task has subtasks - if so, create a task group for it
+        if (task.subtasks && task.subtasks.length > 0) {
+          console.log('Creating task group for task with subtasks:', task.title);
+          
+          // 1. Create a new task group with the main task name
+          const groupResponse = await axios.post(`${API_BASE_URL}/task-groups`, {
+            name: task.title || task.name,
+            description: task.description || ''
+          }, config);
+          
+          if (groupResponse.data.success) {
+            const groupId = groupResponse.data.data._id;
+            successCount++;
+            
+            // 2. Create individual subtasks within this group
+            for (const subtask of task.subtasks) {
+              try {
+                // Convert subtask to API format
+                const subtaskData = {
+                  name: subtask.title || subtask.content,
+                  groupId: groupId,
+                  priority: task.priority || "medium",
+                  dueDate: subtask.scheduledTime || task.dueDate || task.deadline || null,
+                  description: subtask.description || '',
+                  estimatedTime: parseEstimatedTime(subtask.estimatedDuration),
+                  suggestedStartTime: subtask.scheduledTime || null,
+                  isImportant: task.priority === 'high',
+                  isUrgent: Boolean(subtask.scheduledTime || task.dueDate)
+                };
+                
+                // Add the forceImport flag if we're retrying after conflict
+                if (forceImport.value) {
+                  subtaskData.forceImport = true;
+                }
+                
+                // Send request to create subtask
+                await axios.post(`${API_BASE_URL}/tasks`, subtaskData, config);
+                successCount++;
+              } catch (err) {
+                failureCount++;
+                console.error('Error creating subtask:', err);
+              }
+            }
+          } else {
+            failureCount++;
+          }
+        } else {
+          // Regular task without subtasks - use default group if needed
+          let defaultGroupId = null;
+          if (tasksStore.taskGroups.length === 0) {
+            const groupResponse = await axios.post(`${API_BASE_URL}/task-groups`, {
+              name: "AI秘书导入"
+            }, config);
+            
+            if (groupResponse.data.success) {
+              defaultGroupId = groupResponse.data.data._id;
+            }
+          } else {
+            defaultGroupId = tasksStore.taskGroups[0]._id;
+          }
+          
+          // Map AI task format to API format
+          const taskData = {
+            name: task.title || task.name,
+            groupId: defaultGroupId,
+            priority: task.priority || "medium",
+            dueDate: task.dueDate || task.startTime || task.deadline || null,
+            description: task.description || '',
+            isImportant: task.priority === 'high',
+            isUrgent: Boolean(task.dueDate || task.startTime)
+          };
+          
+          // Add the forceImport flag if we're retrying after conflict
+          if (forceImport.value) {
+            taskData.forceImport = true;
+          }
+          
+          // Send request to create task
+          await axios.post(`${API_BASE_URL}/tasks`, taskData, config);
+          successCount++;
+        }
+      } catch (err) {
+        failureCount++;
+        console.error('Error creating task:', err);
+      }
+    }
+    
+    // Reset force import flag
+    forceImport.value = false;
+    
+    // Show success/failure toast
+    if (successCount > 0) {
+      // Determine if we imported any task groups with subtasks
+      const subtaskCount = tasks.reduce((count, task) => {
+        return count + (task.subtasks?.length || 0);
+      }, 0);
+      
+      // Show appropriate success message
+      if (subtaskCount > 0) {
+        showToastNotification(`成功导入 ${successCount} 个任务（包含子任务）`, 'check-circle');
+        
+        // Add success message for task with subtasks
+        addMessage({
+          type: 'ai',
+          content: `✓ 已成功导入任务组及子任务！您现在可以在任务视图中查看和管理这些任务。`,
+          timestamp: new Date()
+        });
+      } else {
+        showToastNotification(`成功导入 ${successCount} 个任务`, 'check-circle');
+      }
+      
+      // Refresh the tasks list
+      await tasksStore.fetchTasks();
+      
+      return { success: true, imported: successCount };
+    } else {
+      showToastNotification('导入失败，请稍后重试', 'times-circle');
+      return { success: false };
+    }
+  } catch (error) {
+    console.error('Bulk import error:', error);
+    
+    // Handle 409 Conflict specifically
+    if (error.response && error.response.status === 409) {
+      // Show conflict modal
+      conflictingTasks.value = error.response.data.conflicts || [];
+      showConflictModal.value = true;
+      pendingTasksToImport.value = tasks;
+      return { success: false, conflict: true };
+    }
+    
+    showToastNotification('导入失败，请稍后重试', 'times-circle');
+    return { success: false, error: error.message };
+  }
+};
+
+// Helper function to parse estimated duration strings like "2小时" to numeric hours
+const parseEstimatedTime = (durationString) => {
+  if (!durationString) return 1; // Default 1 hour
+  
+  // Handle simple numeric values
+  if (typeof durationString === 'number') return durationString;
+  
+  try {
+    // Extract numeric value from strings like "2小时", "0.5小时", "30分钟"
+    const numericValue = parseFloat(durationString.match(/\d+(\.\d+)?/)[0]);
+    
+    // Convert to hours
+    if (durationString.includes('分钟')) {
+      return numericValue / 60;
+    } else if (durationString.includes('小时')) {
+      return numericValue;
+    } else {
+      return numericValue; // Default to hours if unit not specified
+    }
+  } catch (e) {
+    console.warn('Could not parse duration:', durationString);
+    return 1; // Default 1 hour
+  }
+};
+
 // Event and task update handlers
 const updateEvent = (eventData) => {
   console.log('Event update:', eventData);
@@ -273,9 +745,20 @@ const updateEvent = (eventData) => {
       content: `已删除事件「${eventData.title}」`,
       timestamp: new Date()
     });
+    showToastNotification(`已删除事件`, 'trash');
   } else if (eventData.action === 'edit') {
-    // In a real app, this would open an edit form or redirect to event edit page
+    // Open edit event modal
     console.log('Editing event:', eventData);
+    openEditEventModal(eventData);
+  } else if (eventData.action === 'import') {
+    // Import single event
+    importTasks([eventData]);
+  } else if (eventData.action === 'bulk-import') {
+    // Bulk import all events
+    const allEvents = findEventsInMessages();
+    if (allEvents.length > 0) {
+      importTasks(allEvents);
+    }
   } else {
     // Import event
     addMessage({
@@ -296,6 +779,7 @@ const updateTask = (taskData) => {
       content: `已删除任务「${taskData.title}」`,
       timestamp: new Date()
     });
+    showToastNotification(`已删除任务`, 'trash');
   } else if (taskData.action === 'edit') {
     // In a real app, this would open an edit form or redirect to task edit page
     console.log('Editing task:', taskData);
@@ -306,6 +790,22 @@ const updateTask = (taskData) => {
       content: `✓ 已将任务「${taskData.title}」标记为完成！`,
       timestamp: new Date()
     });
+    showToastNotification(`任务已完成`, 'check-circle');
+  } else if (taskData.action === 'import') {
+    // Import single task
+    importTasks([taskData]);
+  } else if (taskData.action === 'bulk-import') {
+    // Bulk import all tasks
+    if (taskData.tasks && Array.isArray(taskData.tasks)) {
+      // If tasks array is provided directly from ResultCards
+      importTasks(taskData.tasks);
+    } else {
+      // Legacy fallback - find all tasks in messages
+      const allTasks = findTasksInMessages();
+      if (allTasks.length > 0) {
+        importTasks(allTasks);
+      }
+    }
   } else {
     // Import task
     addMessage({
@@ -326,6 +826,7 @@ const updateHabit = (habitData) => {
       content: `已删除习惯「${habitData.title}」`,
       timestamp: new Date()
     });
+    showToastNotification(`已删除习惯`, 'trash');
   } else if (habitData.action === 'edit') {
     // In a real app, this would open an edit form or redirect to habit edit page
     console.log('Editing habit:', habitData);
@@ -337,6 +838,28 @@ const updateHabit = (habitData) => {
       timestamp: new Date()
     });
   }
+};
+
+// Helper to find all tasks in messages
+const findTasksInMessages = () => {
+  const tasks = [];
+  messages.value.forEach(message => {
+    if (message.cards && message.cards.tasks) {
+      tasks.push(...message.cards.tasks);
+    }
+  });
+  return tasks;
+};
+
+// Helper to find all events in messages
+const findEventsInMessages = () => {
+  const events = [];
+  messages.value.forEach(message => {
+    if (message.cards && message.cards.events) {
+      events.push(...message.cards.events);
+    }
+  });
+  return events;
 };
 
 // Voice input toggling
@@ -433,7 +956,7 @@ const createCustomVoice = () => {
 .messages-container {
   flex: 1;
   overflow-y: auto;
-  padding: 0 16px 16px;
+  padding: 0 12px 16px;
   scroll-behavior: smooth;
 }
 
@@ -481,7 +1004,7 @@ const createCustomVoice = () => {
 }
 
 .message-content {
-  max-width: 70%;
+  max-width: 80%;
 }
 
 .ai .message-content {
@@ -509,6 +1032,56 @@ const createCustomVoice = () => {
   font-size: 12px;
   color: var(--app-gray);
   margin-top: 4px;
+}
+
+/* Toast notification */
+.toast-notification {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background-color: rgba(0, 0, 0, 0.75);
+  color: white;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  z-index: 999;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  max-width: 80%;
+  text-align: center;
+}
+
+.toast-notification.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.toast-icon {
+  color: #4caf50;
+}
+
+.toast-icon.times-circle {
+  color: #f44336;
+}
+
+.toast-icon.trash {
+  color: #ff9800;
+}
+
+/* Form Error */
+.form-error {
+  color: #f44336;
+  font-size: 14px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  text-align: center;
 }
 
 /* Typing indicator */
@@ -544,85 +1117,70 @@ const createCustomVoice = () => {
   }
 }
 
-/* Task card */
-.task-card {
-  background-color: white;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  margin: 8px 0;
+/* Conflict modal */
+.conflict-modal-content {
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px;
 }
 
-.task-card-header {
-  background-color: var(--app-primary);
-  color: white;
-  padding: 12px;
+.conflict-info {
   display: flex;
   align-items: center;
-}
-
-.task-card-icon {
-  margin-right: 8px;
-}
-
-.task-card-title {
-  font-weight: 600;
-}
-
-.task-card-details {
-  padding: 12px;
-}
-
-.task-card-detail {
-  display: flex;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.task-card-detail:last-child {
-  margin-bottom: 0;
-}
-
-.detail-icon {
-  width: 16px;
-  margin-right: 8px;
-  color: var(--app-gray);
-}
-
-.task-card-actions {
-  display: flex;
-  border-top: 1px solid var(--app-border);
-}
-
-.task-card-btn {
-  flex: 1;
-  background: none;
-  border: none;
-  padding: 12px;
+  gap: 8px;
   font-size: 14px;
-  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.conflict-icon {
+  color: #ff9800;
+}
+
+.conflict-list {
+  background-color: rgba(0, 0, 0, 0.03);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.conflict-item {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.conflict-item:last-child {
+  border-bottom: none;
+}
+
+.conflict-task-name {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.conflict-time {
+  font-size: 13px;
+  color: var(--app-gray);
   display: flex;
   align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s ease;
+  gap: 6px;
 }
 
-.task-card-btn:first-child {
-  border-right: 1px solid var(--app-border);
+.conflict-time-icon {
+  font-size: 12px;
 }
 
-.task-card-btn.primary {
-  color: var(--app-primary);
-  font-weight: 600;
-}
-
-.btn-icon {
-  margin-right: 4px;
+.conflict-question {
+  text-align: center;
+  font-weight: 500;
+  margin-bottom: 0;
 }
 
 /* Input area */
 .input-container {
-  padding: 16px;
+  padding: 12px;
   background-color: var(--app-light);
   border-top: 1px solid var(--app-border);
 }
@@ -631,7 +1189,7 @@ const createCustomVoice = () => {
   display: flex;
   background-color: white;
   border-radius: 24px;
-  padding: 8px 16px;
+  padding: 8px 14px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -707,6 +1265,38 @@ const createCustomVoice = () => {
 
 .voice-info-icon {
   margin-right: 4px;
+}
+
+/* Edit Event Form Styles */
+:deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  padding: 0 0 8px;
+  line-height: 1;
+  font-size: 14px;
+}
+
+:deep(.el-input__inner) {
+  font-size: 15px;
+}
+
+:deep(.el-textarea__inner) {
+  font-size: 15px;
+}
+
+:deep(.el-select .el-input .el-select__caret) {
+  color: var(--app-gray);
+}
+
+:deep(.el-date-editor.el-input) {
+  width: 100%;
+}
+
+:deep(.el-select-dropdown__item) {
+  font-size: 14px;
 }
 
 /* Voice customization modal content */
@@ -841,8 +1431,39 @@ const createCustomVoice = () => {
     background-color: rgba(10, 132, 255, 0.1);
   }
   
-  .task-card {
+  .conflict-list {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .conflict-item {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  :deep(.el-input__inner),
+  :deep(.el-textarea__inner) {
     background-color: #2C2C2E;
+    border-color: #3A3A3C;
+    color: white;
+  }
+  
+  :deep(.el-select-dropdown) {
+    background-color: #2C2C2E;
+    border-color: #3A3A3C;
+  }
+  
+  :deep(.el-select-dropdown__item) {
+    color: #CCCCCC;
+  }
+  
+  :deep(.el-select-dropdown__item.hover) {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  :deep(.el-date-picker) {
+    background-color: #2C2C2E;
+    border-color: #3A3A3C;
+    color: white;
   }
 }
 

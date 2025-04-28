@@ -4,6 +4,7 @@
  */
 
 import * as authRaw from './auth';
+import * as tasksRaw from './tasks';
 import { debugApiCall } from './debug';
 
 // Wrap all auth API methods with debug logging
@@ -34,7 +35,30 @@ const authApi = {
   }
 };
 
+// Wrap all tasks API methods with debug logging
+const tasksApi = {
+  // Task Groups
+  getTaskGroups: debugApiCall(tasksRaw.getTaskGroups, 'getTaskGroups'),
+  createTaskGroup: debugApiCall(tasksRaw.createTaskGroup, 'createTaskGroup'),
+  updateTaskGroup: debugApiCall(tasksRaw.updateTaskGroup, 'updateTaskGroup'),
+  deleteTaskGroup: debugApiCall(tasksRaw.deleteTaskGroup, 'deleteTaskGroup'),
+  
+  // Tasks
+  getTasks: debugApiCall(tasksRaw.getTasks, 'getTasks'),
+  getTasksByQuadrants: debugApiCall(tasksRaw.getTasksByQuadrants, 'getTasksByQuadrants'),
+  getTaskById: debugApiCall(tasksRaw.getTaskById, 'getTaskById'),
+  createTask: debugApiCall(tasksRaw.createTask, 'createTask'),
+  updateTask: debugApiCall(tasksRaw.updateTask, 'updateTask'),
+  updateTaskStatus: debugApiCall(tasksRaw.updateTaskStatus, 'updateTaskStatus'),
+  deleteTask: debugApiCall(tasksRaw.deleteTask, 'deleteTask'),
+  bulkImportTasks: debugApiCall(tasksRaw.bulkImportTasks, 'bulkImportTasks'),
+  
+  // Pomodoro
+  logPomodoro: debugApiCall(tasksRaw.logPomodoro, 'logPomodoro'),
+  getTaskPomodoros: debugApiCall(tasksRaw.getTaskPomodoros, 'getTaskPomodoros')
+};
+
 console.log('API services initialized with debug wrappers');
 
 // Export all API services
-export { authApi }; 
+export { authApi, tasksApi }; 

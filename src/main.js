@@ -1,13 +1,17 @@
 import './assets/main.css'
 import './assets/css/variables.css'
 import './debug.js' // Debug script for network monitoring
-
+import { setupAxiosInterceptors } from './api-fixes/tasks-fix'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import router from './router'
 import App from './App.vue'
+
+
+// Setup axios interceptors to handle 500 errors
+setupAxiosInterceptors()
 
 // FontAwesome setup
 import { library } from '@fortawesome/fontawesome-svg-core'

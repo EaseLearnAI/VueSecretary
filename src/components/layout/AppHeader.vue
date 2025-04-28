@@ -16,7 +16,7 @@
       <div v-if="rightAction" @click="$emit('right-action')" class="ios-header-action ios-header-right">
         <font-awesome-icon :icon="rightActionIcon" />
       </div>
-      <div v-if="leftAction" @click="$emit('left-action')" class="ios-header-action ios-header-left">
+      <div v-if="leftAction" @click="$emit('left-action')" class="ios-header-action ios-header-left" :class="getTooltipClass(leftActionIcon)">
         <font-awesome-icon :icon="leftActionIcon" />
       </div>
     </div>
@@ -59,6 +59,12 @@ function getCurrentTime() {
   const minutes = now.getMinutes().toString().padStart(2, '0');
   return `${hours}:${minutes}`;
 }
+
+// Helper function to set tooltip classes based on icon
+const getTooltipClass = (icon) => {
+  if (icon === 'cog') return 'settings-tooltip';
+  return '';
+};
 
 let timeInterval;
 
@@ -121,16 +127,58 @@ onUnmounted(() => {
 }
 
 .ios-header-action:active {
-  transform: scale(0.95);
+  transform: scale(0.9);
 }
 
 .ios-header-left {
-  left: 16px;
+
+  position: inherit;
+  left: 0px;
+  font-size: 24px;
+  color: #3483FA;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
 }
+
+.ios-header-left:hover {
+  opacity: 1;
+}
+
+.ios-header-action.ios-header-left.settings-tooltip {
+  left: 0;
+  position: absolute; /* 如果父容器需要定位，确保父级有position:relative */
+}
+
 
 .ios-header-right {
   right: 16px;
   color: var(--app-primary, #007AFF);
+}
+
+/* Settings tooltip */
+.settings-tooltip {
+  position: relative;
+}
+
+.settings-tooltip:hover::after {
+  content: "设置";
+  position: absolute;
+  bottom: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  white-space: nowrap;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  animation: fade-in 0.2s ease-in-out;
+  font-weight: normal;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* Dark mode styles */
@@ -148,6 +196,11 @@ onUnmounted(() => {
   
   .ios-header-right {
     color: #0A84FF;
+  }
+  
+  .settings-tooltip:hover::after {
+    background-color: rgba(44, 44, 46, 0.9);
+    color: white;
   }
 }
 

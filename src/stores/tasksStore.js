@@ -1,190 +1,437 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import { tasksApi } from '../api';
 
 export const useTasksStore = defineStore('tasks', () => {
   // State
-  const taskGroups = ref([
-    {
-      id: 1,
-      name: '工作项目',
-      tasks: [
-        { id: 1, name: '完成设计原型', completed: false, priority: 'high', dueDate: new Date('2023-06-10 14:00') },
-        { id: 2, name: '前端开发', completed: true, priority: 'medium', dueDate: new Date('2023-06-08 18:00') },
-        { id: 3, name: '后端 API 集成', completed: false, priority: 'high', dueDate: new Date('2023-06-15 16:00') }
-      ]
-    },
-    {
-      id: 2,
-      name: '个人',
-      tasks: [
-        { id: 4, name: '购物清单', completed: false, priority: 'low', dueDate: new Date('2023-06-12 12:00') },
-        { id: 5, name: '家庭聚会', completed: false, priority: 'medium', dueDate: new Date('2023-06-18 19:00') }
-      ]
-    },
-    {
-      id: 3,
-      name: '学习',
-      tasks: [
-        { id: 6, name: '学习 Vue 3', completed: true, priority: 'high', dueDate: new Date('2023-06-05 10:00') },
-        { id: 7, name: '阅读技术文章', completed: false, priority: 'low', dueDate: new Date('2023-06-20 22:00') }
-      ]
-    }
-  ]);
+  const taskGroups = ref([]);
+  const isLoading = ref(false);
+  const error = ref(null);
   
   // Computed properties
   const flatTasks = computed(() => {
     const tasks = [];
     taskGroups.value.forEach(group => {
-      group.tasks.forEach(task => {
-        tasks.push({
-          ...task,
-          groupId: group.id,
-          groupName: group.name
+      if (group.tasks) {
+        group.tasks.forEach(task => {
+          tasks.push({
+            ...task,
+            groupId: group._id || group.id,
+            groupName: group.name
+          });
         });
-      });
+      }
     });
     return tasks;
   });
   
-  // Generate next task ID
-  function getNextTaskId() {
-    return Math.max(...flatTasks.value.map(t => t.id), 0) + 1;
-  }
-  
-  // Generate next group ID
-  function getNextGroupId() {
-    return Math.max(...taskGroups.value.map(g => g.id), 0) + 1;
-  }
-  
   // Actions
-  function addTask(taskData) {
-    if (!taskData.name.trim()) {
-      return false;
-    }
+  async function fetchTaskGroups() {
+    isLoading.value = true;
+    error.value = null;
     
-    let groupId = taskData.groupId;
-    
-    // Create new group if needed
-    if (groupId === 'new') {
-      if (!taskData.newGroupName.trim()) {
-        return false;
-      }
+    try {
+      console.log('Fetching task groups from API');
+      const response = await tasksApi.getTaskGroups();
+      console.log('API response:', response);
       
-      const newGroupId = getNextGroupId();
-      taskGroups.value.push({
-        id: newGroupId,
-        name: taskData.newGroupName,
-        tasks: []
-      });
-      
-      groupId = newGroupId;
-    }
-    
-    // Add new task to the group
-    const taskId = getNextTaskId();
-    const targetGroup = taskGroups.value.find(g => g.id === groupId);
-    
-    if (!targetGroup) {
-      return false;
-    }
-    
-    targetGroup.tasks.push({
-      id: taskId,
-      name: taskData.name,
-      completed: false,
-      priority: taskData.priority,
-      dueDate: taskData.dueDate
-    });
-    
-    return true;
-  }
-  
-  function updateTask(taskId, updatedData) {
-    for (const group of taskGroups.value) {
-      const taskIndex = group.tasks.findIndex(t => t.id === taskId);
-      if (taskIndex !== -1) {
-        group.tasks[taskIndex] = { ...group.tasks[taskIndex], ...updatedData };
-        return true;
+      if (response.success) {
+        taskGroups.value = response.data;
+        return { success: true, data: response.data };
+      } else {
+        error.value = 'Failed to fetch task groups';
+        return { success: false, error: error.value };
       }
+    } catch (err) {
+      console.error('Error fetching task groups:', err);
+      error.value = err.message || 'Failed to fetch task groups';
+      return { success: false, error: error.value };
+    } finally {
+      isLoading.value = false;
     }
-    return false;
   }
   
-  function deleteTask(taskId) {
-    for (const group of taskGroups.value) {
-      const taskIndex = group.tasks.findIndex(t => t.id === taskId);
-      if (taskIndex !== -1) {
-        group.tasks.splice(taskIndex, 1);
-        return true;
-      }
-    }
-    return false;
-  }
-  
-  function addGroup(groupName) {
-    if (!groupName.trim()) {
-      return false;
-    }
-    
-    const newGroupId = getNextGroupId();
-    taskGroups.value.push({
-      id: newGroupId,
-      name: groupName,
-      tasks: []
-    });
-    
-    return newGroupId;
-  }
-  
-  function updateGroup(groupId, updatedData) {
-    const groupIndex = taskGroups.value.findIndex(g => g.id === groupId);
-    if (groupIndex !== -1) {
-      taskGroups.value[groupIndex] = { ...taskGroups.value[groupIndex], ...updatedData };
-      return true;
-    }
-    return false;
-  }
-  
-  function deleteGroup(groupId) {
-    const groupIndex = taskGroups.value.findIndex(g => g.id === groupId);
-    if (groupIndex !== -1) {
-      taskGroups.value.splice(groupIndex, 1);
-      return true;
-    }
-    return false;
-  }
-  
-  // Mock API functions (can be replaced with real API calls later)
   async function fetchTasks() {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    // Data is already loaded in the store
-    return { success: true };
+    isLoading.value = true;
+    error.value = null;
+    
+    try {
+      console.log('Fetching tasks from API');
+      // First get all task groups
+      const groupsResponse = await tasksApi.getTaskGroups();
+      
+      if (groupsResponse.success) {
+        taskGroups.value = groupsResponse.data;
+        
+        // Then get all tasks and organize them
+        const tasksResponse = await tasksApi.getTasks();
+        
+        if (tasksResponse.success) {
+          // Create a map of task groups by ID for faster lookup
+          const groupsMap = {};
+          taskGroups.value.forEach(group => {
+            groupsMap[group._id] = group;
+            // Initialize tasks array if not exists
+            if (!group.tasks) {
+              group.tasks = [];
+            }
+          });
+          
+          // Assign tasks to their respective groups
+          tasksResponse.data.forEach(task => {
+            const groupId = task.groupId._id || task.groupId;
+            if (groupsMap[groupId]) {
+              groupsMap[groupId].tasks.push(task);
+            }
+          });
+          
+          return { success: true };
+        }
+      }
+      
+      error.value = 'Failed to fetch tasks';
+      return { success: false, error: error.value };
+    } catch (err) {
+      console.error('Error fetching tasks:', err);
+      error.value = err.message || 'Failed to fetch tasks';
+      return { success: false, error: error.value };
+    } finally {
+      isLoading.value = false;
+    }
   }
   
-  async function saveTask(taskData) {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return { success: addTask(taskData) };
+  async function addGroup(groupName) {
+    if (!groupName.trim()) {
+      return { success: false, error: 'Group name cannot be empty' };
+    }
+    
+    isLoading.value = true;
+    error.value = null;
+    
+    try {
+      const response = await tasksApi.createTaskGroup({ name: groupName });
+      
+      if (response.success) {
+        // Add new group to state
+        const newGroup = response.data;
+        newGroup.tasks = [];
+        taskGroups.value.push(newGroup);
+        
+        return { success: true, groupId: newGroup._id };
+      } else {
+        error.value = 'Failed to create group';
+        return { success: false, error: error.value };
+      }
+    } catch (err) {
+      console.error('Error creating group:', err);
+      error.value = err.message || 'Failed to create group';
+      return { success: false, error: error.value };
+    } finally {
+      isLoading.value = false;
+    }
+  }
+  
+  async function updateGroup(groupId, updatedData) {
+    isLoading.value = true;
+    error.value = null;
+    
+    try {
+      const response = await tasksApi.updateTaskGroup(groupId, updatedData);
+      
+      if (response.success) {
+        // Update group in state
+        const groupIndex = taskGroups.value.findIndex(g => g._id === groupId);
+        if (groupIndex !== -1) {
+          taskGroups.value[groupIndex] = { 
+            ...taskGroups.value[groupIndex], 
+            ...response.data 
+          };
+        }
+        
+        return { success: true };
+      } else {
+        error.value = 'Failed to update group';
+        return { success: false, error: error.value };
+      }
+    } catch (err) {
+      console.error('Error updating group:', err);
+      error.value = err.message || 'Failed to update group';
+      return { success: false, error: error.value };
+    } finally {
+      isLoading.value = false;
+    }
+  }
+  
+  async function deleteGroup(groupId) {
+    isLoading.value = true;
+    error.value = null;
+    
+    try {
+      const response = await tasksApi.deleteTaskGroup(groupId);
+      
+      if (response.success) {
+        // Remove group from state
+        taskGroups.value = taskGroups.value.filter(g => g._id !== groupId);
+        
+        return { success: true };
+      } else {
+        error.value = 'Failed to delete group';
+        return { success: false, error: error.value };
+      }
+    } catch (err) {
+      console.error('Error deleting group:', err);
+      error.value = err.message || 'Failed to delete group';
+      return { success: false, error: error.value };
+    } finally {
+      isLoading.value = false;
+    }
+  }
+  
+  async function addTask(taskData) {
+    if (!taskData.name.trim()) {
+      return { success: false, error: 'Task name cannot be empty' };
+    }
+    
+    isLoading.value = true;
+    error.value = null;
+    
+    try {
+      let groupId = taskData.groupId;
+      
+      // Create new group if needed
+      if (groupId === 'new') {
+        if (!taskData.newGroupName.trim()) {
+          isLoading.value = false;
+          return { success: false, error: 'Group name cannot be empty' };
+        }
+        
+        const newGroupResult = await addGroup(taskData.newGroupName);
+        if (!newGroupResult.success) {
+          isLoading.value = false;
+          return newGroupResult;
+        }
+        
+        groupId = newGroupResult.groupId;
+      }
+      
+      // Prepare task data for API
+      const apiTaskData = {
+        name: taskData.name,
+        groupId: groupId,
+        priority: taskData.priority || 'medium',
+        dueDate: taskData.dueDate,
+        isImportant: taskData.isImportant || false,
+        isUrgent: taskData.isUrgent || false
+      };
+      
+      // Create task
+      const response = await tasksApi.createTask(apiTaskData);
+      
+      if (response.success) {
+        // Add task to its group in state
+        const newTask = response.data;
+        const groupIndex = taskGroups.value.findIndex(g => g._id === groupId);
+        
+        if (groupIndex !== -1) {
+          if (!taskGroups.value[groupIndex].tasks) {
+            taskGroups.value[groupIndex].tasks = [];
+          }
+          taskGroups.value[groupIndex].tasks.push(newTask);
+        }
+        
+        return { success: true, taskId: newTask._id };
+      } else {
+        error.value = 'Failed to create task';
+        return { success: false, error: error.value };
+      }
+    } catch (err) {
+      console.error('Error creating task:', err);
+      error.value = err.message || 'Failed to create task';
+      return { success: false, error: error.value };
+    } finally {
+      isLoading.value = false;
+    }
+  }
+  
+  async function updateTask(taskId, updatedData) {
+    isLoading.value = true;
+    error.value = null;
+    
+    try {
+      const response = await tasksApi.updateTask(taskId, updatedData);
+      
+      if (response.success) {
+        // Update task in state
+        for (const group of taskGroups.value) {
+          if (!group.tasks) continue;
+          
+          const taskIndex = group.tasks.findIndex(t => t._id === taskId);
+          if (taskIndex !== -1) {
+            group.tasks[taskIndex] = { ...group.tasks[taskIndex], ...response.data };
+            break;
+          }
+        }
+        
+        return { success: true };
+      } else {
+        error.value = 'Failed to update task';
+        return { success: false, error: error.value };
+      }
+    } catch (err) {
+      console.error('Error updating task:', err);
+      error.value = err.message || 'Failed to update task';
+      return { success: false, error: error.value };
+    } finally {
+      isLoading.value = false;
+    }
+  }
+  
+  async function updateTaskStatus(taskId, completed) {
+    isLoading.value = true;
+    error.value = null;
+    
+    try {
+      const response = await tasksApi.updateTaskStatus(taskId, completed);
+      
+      if (response.success) {
+        // Update task status in state
+        for (const group of taskGroups.value) {
+          if (!group.tasks) continue;
+          
+          const taskIndex = group.tasks.findIndex(t => t._id === taskId);
+          if (taskIndex !== -1) {
+            group.tasks[taskIndex].completed = completed;
+            break;
+          }
+        }
+        
+        return { success: true };
+      } else {
+        error.value = 'Failed to update task status';
+        return { success: false, error: error.value };
+      }
+    } catch (err) {
+      console.error('Error updating task status:', err);
+      error.value = err.message || 'Failed to update task status';
+      return { success: false, error: error.value };
+    } finally {
+      isLoading.value = false;
+    }
+  }
+  
+  async function deleteTask(taskId) {
+    isLoading.value = true;
+    error.value = null;
+    
+    try {
+      const response = await tasksApi.deleteTask(taskId);
+      
+      if (response.success) {
+        // Remove task from state
+        for (const group of taskGroups.value) {
+          if (!group.tasks) continue;
+          
+          const taskIndex = group.tasks.findIndex(t => t._id === taskId);
+          if (taskIndex !== -1) {
+            group.tasks.splice(taskIndex, 1);
+            break;
+          }
+        }
+        
+        return { success: true };
+      } else {
+        error.value = 'Failed to delete task';
+        return { success: false, error: error.value };
+      }
+    } catch (err) {
+      console.error('Error deleting task:', err);
+      error.value = err.message || 'Failed to delete task';
+      return { success: false, error: error.value };
+    } finally {
+      isLoading.value = false;
+    }
+  }
+  
+  async function logPomodoro(taskId, pomodoroData) {
+    isLoading.value = true;
+    error.value = null;
+    
+    try {
+      const response = await tasksApi.logPomodoro(taskId, pomodoroData);
+      
+      if (response.success) {
+        return { success: true, data: response.data };
+      } else {
+        error.value = 'Failed to log pomodoro session';
+        return { success: false, error: error.value };
+      }
+    } catch (err) {
+      console.error('Error logging pomodoro session:', err);
+      error.value = err.message || 'Failed to log pomodoro session';
+      return { success: false, error: error.value };
+    } finally {
+      isLoading.value = false;
+    }
+  }
+  
+  async function bulkImportTasks(tasksData, forceImport = false) {
+    isLoading.value = true;
+    error.value = null;
+    
+    try {
+      // Call the API to bulk import tasks
+      const response = await tasksApi.bulkImportTasks(tasksData, forceImport);
+      
+      if (response.success) {
+        // Refresh tasks after successful import
+        await fetchTasks();
+        return { success: true, imported: response.data.imported || 0 };
+      } else {
+        error.value = 'Failed to bulk import tasks';
+        return { success: false, error: error.value };
+      }
+    } catch (err) {
+      console.error('Error bulk importing tasks:', err);
+      
+      // Handle conflict error specifically
+      if (err.status === 409) {
+        return { 
+          success: false, 
+          conflict: true, 
+          conflicts: err.details?.conflicts || [] 
+        };
+      }
+      
+      error.value = err.message || 'Failed to bulk import tasks';
+      return { success: false, error: error.value };
+    } finally {
+      isLoading.value = false;
+    }
   }
   
   return {
     // State
     taskGroups,
+    isLoading,
+    error,
     
     // Getters
     flatTasks,
     
     // Actions
-    addTask,
-    updateTask,
-    deleteTask,
+    fetchTaskGroups,
+    fetchTasks,
     addGroup,
     updateGroup,
     deleteGroup,
+    addTask,
+    updateTask,
+    updateTaskStatus,
+    deleteTask,
+    logPomodoro,
+    bulkImportTasks,
     
-    // API Methods
-    fetchTasks,
-    saveTask
+    // Legacy API methods (for backward compatibility)
+    saveTask: addTask
   };
 });

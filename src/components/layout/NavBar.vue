@@ -12,14 +12,6 @@
       </div>
       <div class="nav-text">{{ item.label }}</div>
     </router-link>
-    
-    <!-- Logout button -->
-    <div class="nav-item logout-item" @click="logout">
-      <div class="nav-icon">
-        <font-awesome-icon icon="sign-out-alt" />
-      </div>
-      <div class="nav-text">退出</div>
-    </div>
   </div>
 </template>
 
@@ -42,12 +34,6 @@ const navItems = [
 
 const handleResize = () => {
   isMobileView.value = window.innerWidth < 768;
-};
-
-// Logout function
-const logout = () => {
-  localStorage.removeItem('user');
-  router.push('/login');
 };
 
 onMounted(() => {
@@ -114,15 +100,6 @@ onUnmounted(() => {
   width: 100%;
   padding: 15px 0;
   margin-bottom: 10px;
-}
-
-.desktop-nav .logout-item {
-  margin-top: auto;
-  color: var(--app-danger);
-}
-
-.mobile-nav .logout-item {
-  position: relative;
 }
 
 .nav-icon {
