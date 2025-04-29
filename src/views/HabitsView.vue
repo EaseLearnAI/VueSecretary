@@ -1,41 +1,76 @@
 <template>
   <div class="habits-container">
-    <!-- Header with title, tags, and count -->
-    <HabitHeader
-      :title="habitsStore.headerTitle"
-      :count="habitsStore.headerCount"
-      :tags="habitsStore.headerTags"
-      @increase="habitsStore.increaseCount"
-      @decrease="habitsStore.decreaseCount"
-    />
+    <!-- Loading indicator -->
+    <div v-if="habitsStore.isLoading" class="habits-loading">
+      <div class="loading-spinner"></div>
+      <p>加载习惯中...</p>
+    </div>
     
-    <!-- Main content with habit grid -->
-    <main class="habits-content">
-      <HabitGrid
-        :habits="habitsStore.habits"
-        :selectedHabitIndex="habitsStore.selectedHabitIndex"
-        @select-habit="habitsStore.selectHabit"
-        @toggle-complete="habitsStore.toggleComplete"
-        @toggle-style="habitsStore.toggleHabitStyle"
+    <!-- Error message -->
+    <div v-else-if="habitsStore.error" class="habits-error">
+      <p>{{ habitsStore.error }}</p>
+      <button @click="habitsStore.init">重试</button>
+    </div>
+    
+    <!-- Content when loaded -->
+    <template v-else>
+      <!-- Header with title, tags, and count -->
+      <HabitHeader
+        :title="habitsStore.headerTitle"
+        :count="habitsStore.headerCount"
+        :tags="habitsStore.headerTags"
+        :streak="habitsStore.headerStreak"
+        @increase="habitsStore.increaseCount"
+        @decrease="habitsStore.decreaseCount"
       />
-    </main>
-    
-    <!-- Floating add button -->
-    <FloatingButton
-      @click="openAddModal"
-    />
-    
-    <!-- Add habit modal -->
-    <AddHabitModal
-      :visible="isAddModalVisible"
-      @close="closeAddModal"
-      @add-habit="habitsStore.addHabit"
-    />
+      
+      <!-- Main content with habit grid -->
+      <main class="habits-content">
+        <div v-if="habitsStore.habits.length === 0" class="habits-empty">
+          <p>您还没有添加任何习惯</p>
+          <button @click="openAddModal" class="add-habit-btn">添加第一个习惯</button>
+        </div>
+        
+        <HabitGrid
+          v-else
+          :habits="habitsStore.habits"
+          :selectedHabitIndex="habitsStore.selectedHabitIndex"
+          @select-habit="habitsStore.selectHabit"
+          @toggle-complete="habitsStore.toggleComplete"
+          @toggle-style="habitsStore.toggleHabitStyle"
+          @delete-habit="habitsStore.deleteHabit"
+          @edit-habit="openEditModal"
+        />
+      </main>
+      
+      <!-- Floating add button -->
+      <FloatingButton
+        @click="openAddModal"
+      />
+      
+      <!-- Add habit modal -->
+      <AddHabitModal
+        :visible="isAddModalVisible"
+        :tags="habitsStore.tags"
+        @close="closeAddModal"
+        @add-habit="addHabit"
+      />
+      
+      <!-- Edit habit modal -->
+      <AddHabitModal
+        :visible="isEditModalVisible"
+        :tags="habitsStore.tags"
+        :edit-mode="true"
+        :habit-to-edit="habitToEdit"
+        @close="closeEditModal"
+        @update-habit="updateHabit"
+      />
+    </template>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useHabitsStore } from '@/stores/habitsStore';
 import HabitHeader from '@/components/habits/HabitHeader.vue';
 import HabitGrid from '@/components/habits/HabitGrid.vue';
@@ -48,6 +83,8 @@ const habitsStore = useHabitsStore();
 
 // Add modal visibility
 const isAddModalVisible = ref(false);
+const isEditModalVisible = ref(false);
+const habitToEdit = ref(null);
 
 // Methods for modal control
 const openAddModal = () => {
@@ -57,6 +94,46 @@ const openAddModal = () => {
 const closeAddModal = () => {
   isAddModalVisible.value = false;
 };
+
+const openEditModal = (habitId) => {
+  const habit = habitsStore.habits.find(h => h._id === habitId);
+  if (habit) {
+    habitToEdit.value = habit;
+    isEditModalVisible.value = true;
+  }
+};
+
+const closeEditModal = () => {
+  isEditModalVisible.value = false;
+  habitToEdit.value = null;
+};
+
+// Method to add a habit through the store
+const addHabit = async (habitData) => {
+  try {
+    await habitsStore.addHabit(habitData);
+    closeAddModal();
+  } catch (error) {
+    console.error('添加习惯失败:', error);
+    // You might want to show an error message to the user
+  }
+};
+
+// Method to update a habit through the store
+const updateHabit = async (habitData) => {
+  try {
+    await habitsStore.updateHabit(habitData._id, habitData);
+    closeEditModal();
+  } catch (error) {
+    console.error('更新习惯失败:', error);
+  }
+};
+
+// Fetch habits on mount
+onMounted(() => {
+  console.log('HabitsView 组件已挂载，初始化习惯数据...');
+  habitsStore.init();
+});
 </script>
 
 <style scoped>
@@ -77,6 +154,65 @@ const closeAddModal = () => {
   -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
   scrollbar-width: thin; /* For Firefox */
   scrollbar-color: #d4d4d8 transparent; /* For Firefox */
+}
+
+/* Loading state styling */
+.habits-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 30vh;
+  margin-top: 50px;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-top-color: #3b82f6;
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error state styling */
+.habits-error {
+  text-align: center;
+  color: #ef4444;
+  padding: 24px;
+  margin-top: 50px;
+}
+
+.habits-error button {
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  margin-top: 16px;
+  cursor: pointer;
+}
+
+/* Empty state styling */
+.habits-empty {
+  text-align: center;
+  padding: 40px 16px;
+}
+
+.add-habit-btn {
+  margin-top: 16px;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
 }
 
 /* Custom scrollbar styling for WebKit browsers */

@@ -29,34 +29,39 @@
           <label class="form-label">选择图标</label>
           <div class="icon-grid">
             <div 
-              v-for="(icon, index) in icons" 
-              :key="index"
-              :class="['icon-option', { 'selected': selectedIcon === icon.url }]"
-              @click="selectedIcon = icon.url"
+              v-for="icon in habitIcons" 
+              :key="icon.name"
+              :class="['icon-option', { 'selected': selectedIcon === icon.name }]"
+              @click="selectIcon(icon)"
             >
-              <img :src="icon.url" :alt="icon.alt">
+              <font-awesome-icon 
+                :icon="icon.icon" 
+                :style="{color: icon.color}"
+                class="icon-preview" 
+              />
+            </div>
+          </div>
+        </div>
+        
+        <!-- Color Selection -->
+        <div class="form-group">
+          <label class="form-label">选择颜色</label>
+          <div class="color-options">
+            <div 
+              v-for="color in colorOptions" 
+              :key="color.value"
+              :class="['color-option', { 'selected': selectedColor === color.value }]"
+              :style="{ backgroundColor: color.value }"
+              @click="selectedColor = color.value"
+            >
+              <font-awesome-icon v-if="selectedColor === color.value" icon="check" class="color-check" />
             </div>
           </div>
         </div>
         
         <!-- Tag Selection -->
         <div class="form-group">
-          <label class="form-label">选择标签 (可多选)</label>
-          <div class="tag-options">
-            <label 
-              v-for="tag in availableTags" 
-              :key="tag.value"
-              :class="['tag-option', getTagClass(tag.value)]"
-              @click="toggleTag(tag.value)"
-            >
-              <input 
-                type="checkbox" 
-                :value="tag.value" 
-                v-model="selectedTags"
-              >
-              <span>{{ tag.label }}</span>
-            </label>
-          </div>
+          <label class="form-label">添加标签 (可多选)</label>
           
           <!-- Custom Tag Input -->
           <div class="custom-tag-container">
@@ -104,12 +109,6 @@
           </div>
         </div>
         
-        <!-- Dark Mode Option -->
-        <div class="checkbox-group">
-          <input type="checkbox" id="darkMode" v-model="isDarkMode">
-          <label for="darkMode" class="checkbox-label">使用暗色风格</label>
-        </div>
-        
         <!-- Form Buttons -->
         <div class="button-container">
           <button type="button" class="cancel-button" @click="$emit('close')">取消</button>
@@ -122,46 +121,62 @@
 
 <script setup>
 import { ref, computed, onMounted, defineProps, defineEmits, watch } from 'vue';
+import { habitIcons, colorOptions } from '@/plugins/fontawesome';
 
 const props = defineProps({
   visible: {
     type: Boolean,
     default: false
+  },
+  tags: {
+    type: Array,
+    default: () => []
+  },
+  editMode: {
+    type: Boolean,
+    default: false
+  },
+  habitToEdit: {
+    type: Object,
+    default: null
   }
 });
 
-const emit = defineEmits(['close', 'add-habit']);
+const emit = defineEmits(['close', 'add-habit', 'update-habit']);
 
 const habitName = ref('');
 const selectedIcon = ref('');
+const selectedColor = ref('#4299e1'); // 默认蓝色
 const selectedTags = ref([]);
 const isDarkMode = ref(false);
 const modalContent = ref(null);
 const newTagName = ref('');
 const customTags = ref([]);
 
-// Available icons
-const icons = [
-  { url: 'https://cdn-icons-png.flaticon.com/512/2503/2503381.png', alt: '羽毛球' },
-  { url: 'https://cdn-icons-png.flaticon.com/512/2965/2965358.png', alt: '笔记本' },
-  { url: 'https://cdn-icons-png.flaticon.com/512/3094/3094837.png', alt: '枕头' },
-  { url: 'https://cdn-icons-png.flaticon.com/512/1179/1179069.png', alt: '视频' },
-  { url: 'https://cdn-icons-png.flaticon.com/512/2921/2921222.png', alt: '铅笔' },
-  { url: 'https://cdn-icons-png.flaticon.com/512/1046/1046857.png', alt: '食物' },
-  { url: 'https://cdn-icons-png.flaticon.com/512/1940/1940922.png', alt: '口红' },
-  { url: 'https://cdn-icons-png.flaticon.com/512/2548/2548537.png', alt: '跑步' },
-  { url: 'https://cdn-icons-png.flaticon.com/512/2405/2405479.png', alt: '奶茶' },
-  { url: 'https://cdn-icons-png.flaticon.com/512/2553/2553627.png', alt: '沐浴' }
-];
+// 监听编辑模式，填充表单
+watch(() => props.habitToEdit, (newHabit) => {
+  if (newHabit && props.editMode) {
+    habitName.value = newHabit.name || '';
+    selectedIcon.value = newHabit.icon || '';
+    selectedColor.value = newHabit.color || '#4299e1';
+    selectedTags.value = [...(newHabit.tags || [])];
+    isDarkMode.value = newHabit.isDark || false;
+    
+    // 如果有标签，转换为自定义标签格式
+    if (newHabit.tags && newHabit.tags.length > 0) {
+      customTags.value = newHabit.tags.map(tag => ({
+        value: `custom-${Date.now()}-${tag}`,
+        label: tag
+      }));
+    }
+  }
+}, { immediate: true });
 
-// Available tags
-const availableTags = [
-  { value: 'health', label: '健康' },
-  { value: 'study', label: '学习' },
-  { value: 'entertainment', label: '娱乐' },
-  { value: 'bad', label: '坏习惯' },
-  { value: 'pinned', label: '置顶' }
-];
+// 选择图标
+const selectIcon = (icon) => {
+  selectedIcon.value = icon.name;
+  selectedColor.value = icon.color || '#4299e1';
+};
 
 // Check if form is valid
 const isFormValid = computed(() => {
@@ -207,20 +222,20 @@ const handleTouchEnd = (e) => {
 const addCustomTag = () => {
   if (!newTagName.value.trim()) return;
   
-  // Create a value based on the tag name
+  // 创建标签值和标签名
   const tagValue = `custom-${Date.now()}`;
   const tagLabel = newTagName.value.trim();
   
-  // Add to custom tags
+  // 添加到自定义标签
   customTags.value.push({
     value: tagValue,
     label: tagLabel
   });
   
-  // Auto-select the new tag
+  // 自动选择新标签
   selectedTags.value.push(tagValue);
   
-  // Clear the input
+  // 清空输入
   newTagName.value = '';
 };
 
@@ -250,69 +265,15 @@ const toggleTag = (tagValue) => {
 
 // Get CSS class for tag option
 const getTagClass = (tagValue) => {
-  if (!selectedTags.value.includes(tagValue)) {
-    return '';
+  const baseClass = getTagBaseClass(tagValue);
+  if (selectedTags.value.includes(tagValue)) {
+    return `selected-${baseClass}`;
   }
-  
-  if (tagValue.startsWith('custom-')) {
-    return 'selected-blue';
-  }
-  
-  switch (tagValue) {
-    case 'health':
-    case 'study':
-      return 'selected-green';
-    case 'bad':
-      return 'selected-red';
-    case 'pinned':
-    case 'entertainment':
-      return 'selected-orange';
-    default:
-      return '';
-  }
+  return '';
 };
 
-// Submit the form
-const submitForm = () => {
-  if (!isFormValid.value) return;
-  
-  // Combine built-in and custom tags
-  const allTags = [...availableTags, ...customTags.value];
-  
-  const newHabit = {
-    id: Date.now().toString(),
-    title: habitName.value,
-    count: 0,
-    isDark: isDarkMode.value,
-    isCompleted: false,
-    iconUrl: selectedIcon.value,
-    iconType: 'plus',
-    tags: selectedTags.value.map(tag => {
-      const foundTag = allTags.find(t => t.value === tag);
-      return {
-        value: tag,
-        label: foundTag ? foundTag.label : tag,
-        type: getTagType(tag)
-      };
-    })
-  };
-  
-  emit('add-habit', newHabit);
-  resetForm();
-};
-
-// Reset form after submission
-const resetForm = () => {
-  habitName.value = '';
-  selectedIcon.value = '';
-  selectedTags.value = [];
-  isDarkMode.value = false;
-  newTagName.value = '';
-  // Don't reset custom tags between sessions - they're reusable
-};
-
-// Get tag type for styling
-const getTagType = (tagValue) => {
+// Get base tag color
+const getTagBaseClass = (tagValue) => {
   if (tagValue.startsWith('custom-')) {
     return 'blue';
   }
@@ -320,18 +281,69 @@ const getTagType = (tagValue) => {
   switch (tagValue) {
     case 'health':
     case 'study':
+    case 'personal':
       return 'green';
     case 'bad':
+    case 'negative':
       return 'red';
-    case 'pinned':
     case 'entertainment':
+    case 'fun':
+    case 'leisure':
       return 'orange';
+    case 'work':
+      return 'blue';
+    case '阅读':
+      return 'purple';
     default:
       return 'blue';
   }
 };
 
-// Reset form when modal closes
+// Submit the form
+const submitForm = () => {
+  // 创建习惯对象
+  const habitData = {
+    name: habitName.value.trim(),
+    description: '',
+    icon: selectedIcon.value,
+    tags: [],
+    frequency: ['daily'],
+    reminder: false,
+    color: isDarkMode.value ? '#1f2937' : selectedColor.value,
+    isDark: isDarkMode.value,
+    iconType: 'plus'
+  };
+  
+  // 从自定义标签中提取标签名
+  customTags.value.forEach(tag => {
+    if (selectedTags.value.includes(tag.value)) {
+      habitData.tags.push(tag.label.toLowerCase());
+    }
+  });
+  
+  if (props.editMode && props.habitToEdit) {
+    // 如果是编辑模式，保留原有的ID和其他数据
+    emit('update-habit', { ...props.habitToEdit, ...habitData });
+  } else {
+    // 如果是新增模式
+    emit('add-habit', habitData);
+  }
+  
+  resetForm();
+};
+
+// Reset the form
+const resetForm = () => {
+  habitName.value = '';
+  selectedIcon.value = '';
+  selectedColor.value = '#4299e1';
+  selectedTags.value = [];
+  isDarkMode.value = false;
+  newTagName.value = '';
+  customTags.value = [];
+};
+
+// Reset form when modal is closed
 watch(() => props.visible, (newValue) => {
   if (!newValue) {
     resetForm();
@@ -414,7 +426,7 @@ watch(() => props.visible, (newValue) => {
   font-size: 14px;
   font-weight: 500;
   color: #374151;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .form-input {
@@ -455,15 +467,51 @@ watch(() => props.visible, (newValue) => {
 
 .icon-option:hover {
   border-color: #48BB78;
+  background-color: #f0fdf4;
 }
 
 .icon-option.selected {
   border-color: #48BB78;
+  background-color: #f0fdf4;
 }
 
-.icon-option img {
-  width: 32px;
-  height: 32px;
+.icon-preview {
+  font-size: 24px;
+}
+
+/* Color selection */
+.color-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.color-option {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s cubic-bezier(0.25, 1.25, 0.5, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.color-option:hover {
+  transform: scale(1.1);
+}
+
+.color-option.selected {
+  border-color: white;
+  box-shadow: 0 0 0 2px #48BB78, 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.color-check {
+  color: white;
+  font-size: 14px;
 }
 
 .tag-options {
@@ -476,13 +524,14 @@ watch(() => props.visible, (newValue) => {
 .tag-option {
   display: inline-flex;
   align-items: center;
-  padding: 4px 12px;
+  padding: 6px 12px;
   border-radius: 9999px;
   background-color: #f3f4f6;
   color: #374151;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.25, 1.25, 0.5, 1);
   position: relative;
+  font-size: 14px;
 }
 
 .tag-option:hover {
@@ -491,6 +540,12 @@ watch(() => props.visible, (newValue) => {
 
 .tag-option input[type="checkbox"] {
   display: none;
+}
+
+.tag-count {
+  margin-left: 4px;
+  opacity: 0.6;
+  font-size: 12px;
 }
 
 .tag-option.selected-green {
@@ -515,6 +570,12 @@ watch(() => props.visible, (newValue) => {
   background-color: #eff6ff;
   color: #2563eb;
   box-shadow: 0 0 0 2px #dbeafe;
+}
+
+.tag-option.selected-purple {
+  background-color: #f5f3ff;
+  color: #7c3aed;
+  box-shadow: 0 0 0 2px #e9d5ff;
 }
 
 .custom-tag-container {
@@ -611,7 +672,7 @@ watch(() => props.visible, (newValue) => {
 }
 
 .cancel-button {
-  padding: 8px 16px;
+  padding: 10px 18px;
   border-radius: 12px;
   background-color: #f3f4f6;
   color: #374151;
@@ -627,7 +688,7 @@ watch(() => props.visible, (newValue) => {
 }
 
 .submit-button {
-  padding: 8px 16px;
+  padding: 10px 18px;
   border-radius: 12px;
   background-color: #48BB78;
   color: white;
