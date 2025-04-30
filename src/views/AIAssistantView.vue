@@ -154,67 +154,6 @@
         </button>
       </template>
     </ModalContainer>
-    
-    <!-- Voice customization modal -->
-    <ModalContainer v-model="showVoiceModal" title="创建个性化语音助手">
-      <div class="voice-modal-content">
-        <p class="voice-info">上传10-20秒的语音示例，AI将复制声音风格创建个性化助手</p>
-        
-        <div class="voice-upload-area" @click="triggerFileInput" :class="{ 'has-file': voiceFile }">
-          <input 
-            type="file" 
-            ref="fileInput" 
-            accept="audio/*" 
-            class="file-input"
-            @change="handleFileChange"
-          />
-          <div v-if="!voiceFile" class="upload-placeholder">
-            <font-awesome-icon icon="cloud-arrow-up" class="upload-icon" />
-            <div>点击上传语音文件</div>
-          </div>
-          <div v-else class="file-info">
-            <font-awesome-icon icon="file-audio" class="file-icon" />
-            <div class="file-name">{{ voiceFile.name }}</div>
-            <button class="remove-file-btn" @click.stop="removeFile">
-              <font-awesome-icon icon="times" />
-            </button>
-          </div>
-        </div>
-        
-        <div class="voice-settings">
-          <div class="voice-setting-item">
-            <label>音色名称</label>
-            <input 
-              type="text" 
-              v-model="voiceName" 
-              class="voice-input" 
-              placeholder="例如：我的语音助手"
-            />
-          </div>
-          
-          <div class="voice-setting-item">
-            <label>提示词风格</label>
-            <el-select v-model="voiceStyle" placeholder="选择提示词风格" class="voice-select">
-              <el-option label="亲切友好" value="friendly" />
-              <el-option label="简洁专业" value="professional" />
-              <el-option label="幽默活泼" value="humorous" />
-              <el-option label="温柔关怀" value="caring" />
-            </el-select>
-          </div>
-        </div>
-      </div>
-      
-      <template #footer>
-        <button class="btn btn-secondary" @click="closeVoiceModal">取消</button>
-        <button 
-          class="btn btn-primary" 
-          :disabled="!voiceFile || !voiceName" 
-          @click="createCustomVoice"
-        >
-          创建
-        </button>
-      </template>
-    </ModalContainer>
   </BaseLayout>
 </template>
 
@@ -267,13 +206,6 @@ const forceImport = ref(false);
 const isRecording = ref(false);
 const hasCustomVoice = ref(false);
 
-// Voice customization
-const showVoiceModal = ref(false);
-const voiceFile = ref(null);
-const voiceName = ref('');
-const voiceStyle = ref('friendly');
-const fileInput = ref(null);
-
 // Welcome message
 onMounted(() => {
   // Add welcome message with a small delay
@@ -290,11 +222,6 @@ onMounted(() => {
   const hasVoice = localStorage.getItem('hasCustomVoice');
   if (hasVoice) {
     hasCustomVoice.value = true;
-  } else {
-    // Show customization modal after a delay
-    setTimeout(() => {
-      showVoiceModal.value = true;
-    }, 1500);
   }
 });
 
@@ -883,67 +810,6 @@ const toggleVoiceInput = () => {
     console.log('Stopped recording');
   }
 };
-
-// Voice customization modal
-const triggerFileInput = () => {
-  fileInput.value.click();
-};
-
-const handleFileChange = (event) => {
-  const file = event.target.files[0];
-  if (file) {
-    voiceFile.value = file;
-  }
-};
-
-const removeFile = () => {
-  voiceFile.value = null;
-  fileInput.value.value = ''; // Reset file input
-};
-
-const closeVoiceModal = () => {
-  showVoiceModal.value = false;
-  voiceFile.value = null;
-  voiceName.value = '';
-};
-
-const createCustomVoice = () => {
-  // In a real app, this would upload the file to the server
-  // and process it with a voice cloning API
-  
-  // For demo purposes, we'll simulate success
-  console.log(`Creating custom voice: ${voiceName.value}`);
-  
-  // Show loading state
-  const processingMessage = {
-    type: 'ai',
-    content: '正在处理你的语音样本...',
-    timestamp: new Date()
-  };
-  addMessage(processingMessage);
-  
-  // Simulate processing delay
-  setTimeout(() => {
-    // Update the message
-    const index = messages.value.indexOf(processingMessage);
-    messages.value[index] = {
-      type: 'ai',
-      content: `✓ 成功创建个性化语音「${voiceName.value}」！从现在起，我会用这个声音与你交流。`,
-      timestamp: new Date()
-    };
-    
-    // Set as having custom voice
-    hasCustomVoice.value = true;
-    localStorage.setItem('hasCustomVoice', 'true');
-    
-    // Close modal
-    showVoiceModal.value = false;
-    
-    // Reset voice creation form
-    voiceFile.value = null;
-    voiceName.value = '';
-  }, 3000);
-};
 </script>
 
 <style scoped>
@@ -1297,174 +1163,6 @@ const createCustomVoice = () => {
 
 :deep(.el-select-dropdown__item) {
   font-size: 14px;
-}
-
-/* Voice customization modal content */
-.voice-modal-content {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.voice-info {
-  color: var(--app-gray);
-  margin: 0;
-  font-size: 14px;
-}
-
-.voice-upload-area {
-  border: 2px dashed var(--app-border);
-  border-radius: 12px;
-  padding: 24px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.voice-upload-area:hover {
-  background-color: var(--app-light);
-}
-
-.voice-upload-area.has-file {
-  border-color: var(--app-primary);
-  background-color: rgba(0, 122, 255, 0.05);
-}
-
-.file-input {
-  display: none;
-}
-
-.upload-placeholder {
-  color: var(--app-gray);
-}
-
-.upload-icon {
-  font-size: 24px;
-  margin-bottom: 8px;
-}
-
-.file-info {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.file-icon {
-  color: var(--app-primary);
-  margin-right: 8px;
-}
-
-.file-name {
-  flex: 1;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.remove-file-btn {
-  background: none;
-  border: none;
-  color: var(--app-danger);
-  cursor: pointer;
-  padding: 4px;
-}
-
-.voice-settings {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.voice-setting-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.voice-setting-item label {
-  font-weight: 500;
-  font-size: 14px;
-}
-
-.voice-input {
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--app-border);
-  font-size: 14px;
-  outline: none;
-  transition: border-color 0.2s ease;
-}
-
-.voice-input:focus {
-  border-color: var(--app-primary);
-}
-
-.voice-select {
-  width: 100%;
-}
-
-/* Dark mode adjustments */
-@media (prefers-color-scheme: dark) {
-  .ai .message-content {
-    background-color: #2C2C2E;
-  }
-  
-  .user .message-content {
-    background-color: #0A84FF;
-  }
-  
-  .input-area {
-    background-color: #2C2C2E;
-  }
-  
-  .message-input {
-    background-color: transparent;
-    color: white;
-  }
-  
-  .voice-upload-area:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-  }
-  
-  .voice-upload-area.has-file {
-    background-color: rgba(10, 132, 255, 0.1);
-  }
-  
-  .conflict-list {
-    background-color: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.1);
-  }
-  
-  .conflict-item {
-    border-color: rgba(255, 255, 255, 0.1);
-  }
-  
-  :deep(.el-input__inner),
-  :deep(.el-textarea__inner) {
-    background-color: #2C2C2E;
-    border-color: #3A3A3C;
-    color: white;
-  }
-  
-  :deep(.el-select-dropdown) {
-    background-color: #2C2C2E;
-    border-color: #3A3A3C;
-  }
-  
-  :deep(.el-select-dropdown__item) {
-    color: #CCCCCC;
-  }
-  
-  :deep(.el-select-dropdown__item.hover) {
-    background-color: rgba(255, 255, 255, 0.05);
-  }
-  
-  :deep(.el-date-picker) {
-    background-color: #2C2C2E;
-    border-color: #3A3A3C;
-    color: white;
-  }
 }
 
 @keyframes fadeIn {

@@ -30,7 +30,24 @@ import {
   faTrophy,
   faPalette,
   faAppleAlt,
-  faWater
+  faWater,
+  // New icons for voice setting feature
+  faCloudArrowUp,
+  faFileAudio,
+  faMicrophone,
+  faMicrophoneAlt,
+  faPlay,
+  faPause,
+  faArrowRight,
+  faArrowLeft,
+  faInfoCircle,
+  faExclamationTriangle,
+  faCheckCircle,
+  faMagic,
+  faDownload,
+  faPlusCircle,
+  faHistory,
+  faSave
 } from '@fortawesome/free-solid-svg-icons';
 
 // 添加需要的图标到库
@@ -64,7 +81,24 @@ library.add(
   faTrophy,
   faPalette,
   faAppleAlt,
-  faWater
+  faWater,
+  // New icons for voice setting feature
+  faCloudArrowUp,
+  faFileAudio,
+  faMicrophone,
+  faMicrophoneAlt,
+  faPlay,
+  faPause,
+  faArrowRight,
+  faArrowLeft,
+  faInfoCircle,
+  faExclamationTriangle,
+  faCheckCircle,
+  faMagic,
+  faDownload,
+  faPlusCircle,
+  faHistory,
+  faSave
 );
 
 // 导出组件和图标列表

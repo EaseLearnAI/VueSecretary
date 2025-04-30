@@ -145,7 +145,7 @@ onUnmounted(() => {
 }
 
 .ios-header-action.ios-header-left.settings-tooltip {
-  left: 0;
+  left: 5%;
   position: absolute; /* 如果父容器需要定位，确保父级有position:relative */
 }
 

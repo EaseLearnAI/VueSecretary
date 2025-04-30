@@ -139,6 +139,15 @@
         </div>
         <div class="divider"></div>
         
+        <!-- 个性化语音合成 -->
+        <div class="settings-item" @click="openVoiceSettingModal">
+          <div class="settings-item-icon">
+            <font-awesome-icon icon="microphone-alt" />
+          </div>
+          <div class="settings-item-text">专属于你的语音陪伴</div>
+        </div>
+        <div class="divider"></div>
+        
         <!-- 退出登录 -->
         <div class="settings-item" @click="showLogoutConfirm = true">
           <div class="settings-item-icon">
@@ -192,6 +201,12 @@
     <div class="feedback-success" v-if="showFeedbackSuccess">
       感谢您的反馈！我们已收到并会尽快处理。
     </div>
+    
+    <!-- Voice Setting Modal -->
+    <VoiceSettingModal 
+      v-if="showVoiceSettingModal" 
+      @close="closeVoiceSettingModal" 
+    />
   </BaseLayout>
 </template>
 
@@ -205,6 +220,7 @@ import ModalContainer from '../components/layout/ModalContainer.vue';
 import TaskList from '../components/tasks/TaskList.vue';
 import TaskQuadrant from '../components/tasks/TaskQuadrant.vue';
 import TaskPomodoro from '../components/tasks/TaskPomodoro.vue';
+import VoiceSettingModal from '../components/voicesetting/VoiceSettingModal.vue';
 
 const router = useRouter();
 
@@ -440,6 +456,18 @@ const selectTask = (task) => {
   console.log('Task selected for pomodoro:', task);
   selectedTask.value = task;
   showPomodoroModal.value = true;
+};
+
+// Voice setting modal
+const showVoiceSettingModal = ref(false);
+
+const openVoiceSettingModal = () => {
+  showVoiceSettingModal.value = true;
+  closeSettingsPanel();
+};
+
+const closeVoiceSettingModal = () => {
+  showVoiceSettingModal.value = false;
 };
 </script>
 
