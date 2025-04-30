@@ -21,7 +21,11 @@ import { fas } from '@fortawesome/free-solid-svg-icons'
 // Custom directives
 import { vDoubleTap } from './components/habits/doubleTap'
 
+// Add additional icons
+import { faInfoCircle } from '@fortawesome/free-solid-svg-icons';
+
 library.add(fas)
+library.add(faInfoCircle)
 
 const app = createApp(App)
 

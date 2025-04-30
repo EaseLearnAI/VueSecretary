@@ -47,19 +47,54 @@
     
     <div class="form-actions">
       <button 
+        class="btn-generate" 
+        @click="generateFeedback"
+        :disabled="!isFormValid || isLoading"
+      >
+        <span v-if="isLoading">
+          <font-awesome-icon icon="spinner" spin class="btn-icon" />
+          生成中...
+        </span>
+        <span v-else>
+          生成反馈
+          <font-awesome-icon icon="magic" class="btn-icon" />
+        </span>
+      </button>
+      
+      <button 
         class="btn-next" 
         @click="nextStep"
-        :disabled="!isFormValid"
+        :disabled="!isFormValid || !feedbackData"
       >
         下一步
         <font-awesome-icon icon="arrow-right" class="btn-icon" />
       </button>
     </div>
+    
+    <!-- 反馈显示区域 -->
+    <feedback-display
+      v-if="showFeedback"
+      :loading="isLoading"
+      :error="error"
+      :feedback="feedbackData"
+      :meta="feedbackMeta"
+      :mock-mode="mockMode"
+      @retry="generateFeedback"
+    />
+
+    <!-- Add mock mode notification after the feedback display -->
+    <div v-if="mockMode && !isLoading && !error" class="mock-mode-alert">
+      <font-awesome-icon icon="info-circle" class="info-icon" />
+      <p>后端服务器未检测到，当前使用的是本地模拟数据，而非真实API响应。</p>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
+import { generateFeedback as callGenerateFeedback, checkServerStatus } from '@/api/feedback';
+import { isDevelopment } from '@/env';
+import FeedbackDisplay from './FeedbackDisplay.vue';
 
 const props = defineProps({
   formData: {
@@ -74,61 +109,87 @@ const emit = defineEmits(['update:formData', 'next-step']);
 const localData = ref({
   textPrompt: props.formData.textPrompt || '',
   encouragementStyle: props.formData.encouragementStyle || '',
-  criticismStyle: props.formData.criticismStyle || ''
+  criticismStyle: props.formData.criticismStyle || '',
+  feedbackData: props.formData.feedbackData || null
 });
+
+// Feedback state
+const isLoading = ref(false);
+const error = ref('');
+const feedbackData = ref(null);
+const feedbackMeta = ref(null);
+const showFeedback = ref(false);
+
+// Add mock mode state
+const mockMode = ref(false);
 
 // Sync with props
 watch(() => props.formData, (newData) => {
   localData.value = {
     textPrompt: newData.textPrompt || '',
     encouragementStyle: newData.encouragementStyle || '',
-    criticismStyle: newData.criticismStyle || ''
+    criticismStyle: newData.criticismStyle || '',
+    feedbackData: newData.feedbackData || null
   };
+  
+  // Update the feedback data if it exists in the form data
+  if (newData.feedbackData) {
+    feedbackData.value = newData.feedbackData;
+    showFeedback.value = true;
+  }
 }, { deep: true });
 
-// Encouragement styles
+// Add onMounted hook to check server status
+onMounted(async () => {
+  if (isDevelopment) {
+    const isServerRunning = await checkServerStatus();
+    mockMode.value = !isServerRunning;
+  }
+});
+
+// Encouragement styles - Map to API format
 const encouragementStyles = [
   { 
-    value: 'gentle', 
+    value: '温和鼓励', 
     label: '温和鼓励', 
     example: '例如：你做得很好，继续加油！' 
   },
   { 
-    value: 'enthusiastic', 
+    value: '热情鼓励', 
     label: '热情鼓励', 
     example: '例如：太棒了！你的进步令人惊叹！' 
   },
   { 
-    value: 'professional', 
+    value: '专业鼓励', 
     label: '专业鼓励', 
     example: '例如：你的表现符合专业标准，请保持。' 
   },
   { 
-    value: 'humorous', 
+    value: '幽默鼓励', 
     label: '幽默鼓励', 
     example: '例如：哇！简直比超人还厉害！' 
   }
 ];
 
-// Criticism styles
+// Criticism styles - Map to API format
 const criticismStyles = [
   { 
-    value: 'constructive', 
+    value: '建设性批评', 
     label: '建设性批评', 
     example: '例如：这个地方可以改进，试试这样做...' 
   },
   { 
-    value: 'direct', 
+    value: '直接批评', 
     label: '直接批评', 
     example: '例如：这里做得不够好，需要重新调整。' 
   },
   { 
-    value: 'gentle', 
+    value: '委婉批评', 
     label: '委婉批评', 
     example: '例如：或许我们可以尝试另一种方式？' 
   },
   { 
-    value: 'coaching', 
+    value: '教练式批评', 
     label: '教练式批评', 
     example: '例如：思考一下，这样做的结果会怎样？' 
   }
@@ -148,7 +209,10 @@ const selectCriticismStyle = (value) => {
 
 // Update parent form data
 const updateData = () => {
-  emit('update:formData', { ...localData.value });
+  emit('update:formData', { 
+    ...localData.value,
+    feedbackData: feedbackData.value 
+  });
 };
 
 // Form validation
@@ -160,9 +224,56 @@ const isFormValid = computed(() => {
   );
 });
 
+// Update the generateFeedback function
+const generateFeedback = async () => {
+  if (!isFormValid.value) return;
+  
+  isLoading.value = true;
+  error.value = '';
+  showFeedback.value = true;
+  
+  try {
+    // Check server status, may switch to mock mode
+    if (isDevelopment) {
+      const isServerRunning = await checkServerStatus();
+      mockMode.value = !isServerRunning;
+    }
+    
+    const result = await callGenerateFeedback({
+      userInput: localData.value.textPrompt,
+      encourageStyle: localData.value.encouragementStyle,
+      criticizeStyle: localData.value.criticismStyle
+    });
+    
+    if (result.success) {
+      feedbackData.value = result.data;
+      feedbackMeta.value = result.meta;
+      localData.value.feedbackData = result.data;
+      updateData();
+    } else {
+      error.value = result.message || '生成反馈失败，请重试';
+    }
+  } catch (err) {
+    console.error('Error generating feedback:', err);
+    
+    // 处理常见错误类型
+    if (err.message && err.message.includes('后端服务器未运行')) {
+      error.value = '后端服务器未启动，请启动服务器后重试';
+    } else if (err.code === 'ECONNABORTED') {
+      error.value = '请求超时，请检查网络连接';
+    } else if (err.message && err.message.includes('Network Error')) {
+      error.value = '网络错误，请检查后端服务器是否正在运行';
+    } else {
+      error.value = err.response?.data?.message || '网络错误，请检查连接后重试';
+    }
+  } finally {
+    isLoading.value = false;
+  }
+};
+
 // Next step handler
 const nextStep = () => {
-  if (isFormValid.value) {
+  if (isFormValid.value && feedbackData.value) {
     emit('next-step');
   }
 };
@@ -245,17 +356,14 @@ const nextStep = () => {
 
 .form-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   margin-top: 10px;
 }
 
-.btn-next {
+.btn-generate, .btn-next {
   display: flex;
   align-items: center;
   gap: 8px;
-  background-color: var(--app-primary, #0A84FF);
-  color: white;
-  border: none;
   border-radius: 20px;
   padding: 10px 20px;
   font-size: 14px;
@@ -264,11 +372,27 @@ const nextStep = () => {
   transition: all 0.3s;
 }
 
+.btn-generate {
+  background-color: #28a745;
+  color: white;
+  border: none;
+}
+
+.btn-generate:hover {
+  background-color: rgba(40, 167, 69, 0.8);
+}
+
+.btn-next {
+  background-color: var(--app-primary, #0A84FF);
+  color: white;
+  border: none;
+}
+
 .btn-next:hover {
   background-color: rgba(10, 132, 255, 0.8);
 }
 
-.btn-next:disabled {
+.btn-generate:disabled, .btn-next:disabled {
   background-color: #cccccc;
   cursor: not-allowed;
 }
@@ -301,6 +425,43 @@ const nextStep = () => {
   
   .style-option.selected {
     background-color: rgba(10, 132, 255, 0.2);
+  }
+}
+
+/* Add styles for the mock mode alert */
+.mock-mode-alert {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: #fff3cd;
+  border: 1px solid #ffeeba;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mock-mode-alert .info-icon {
+  color: #856404;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.mock-mode-alert p {
+  margin: 0;
+  color: #856404;
+  font-size: 14px;
+}
+
+/* Dark mode adaptations */
+@media (prefers-color-scheme: dark) {
+  .mock-mode-alert {
+    background-color: rgba(255, 243, 205, 0.1);
+    border-color: #856404;
+  }
+  
+  .mock-mode-alert p, 
+  .mock-mode-alert .info-icon {
+    color: #ffc107;
   }
 }
 </style> 
