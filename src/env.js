@@ -15,3 +15,11 @@ export const isDevelopment = import.meta.env.DEV;
 
 // 开发环境的后端服务器地址
 export const BACKEND_DEV_SERVER = 'http://localhost:3000'; 
+
+/**
+ * Get the API base URL
+ * @returns {string} API base URL
+ */
+export const getApiUrl = () => {
+  return isDevelopment ? BACKEND_DEV_SERVER : '';
+}; 

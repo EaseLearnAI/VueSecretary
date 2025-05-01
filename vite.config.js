@@ -19,6 +19,12 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
         rewrite: (path) => path
+      },
+      // Voice API proxy
+      '/api/voice': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        rewrite: (path) => path
       }
     }
   },

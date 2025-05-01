@@ -283,4 +283,15 @@ export function getCurrentUser() {
  */
 export function getToken() {
   return localStorage.getItem('token');
+}
+
+/**
+ * Get the authorization headers for authenticated requests
+ * @returns {Object} Headers object with Authorization token
+ */
+export function getAuthHeaders() {
+  const token = getToken();
+  return {
+    'Authorization': token ? `Bearer ${token}` : ''
+  };
 } 

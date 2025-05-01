@@ -41,6 +41,12 @@ const router = createRouter({
       name: 'stats',
       component: () => import('../views/StatsView.vue'),
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/voice-test',
+      name: 'voice-test',
+      component: () => import('../components/voicesetting/VoiceTest.vue'),
+      meta: { requiresAuth: true }
     }
   ]
 })

@@ -8,7 +8,8 @@
       :class="{ 
         'has-file': audioFile,
         'drag-over': isDragging,
-        'error': uploadError
+        'error': uploadError,
+        'uploading': isUploading
       }"
       @click="triggerFileInput"
       @dragover.prevent="onDragOver"
@@ -23,10 +24,15 @@
         @change="handleFileChange"
       />
       
-      <div v-if="!audioFile" class="upload-placeholder">
+      <div v-if="!audioFile && !isUploading" class="upload-placeholder">
         <font-awesome-icon icon="cloud-arrow-up" class="upload-icon" />
         <div class="upload-text">点击或拖拽上传音频文件</div>
         <div class="upload-formats">支持格式：WAV / MP3 / M4A</div>
+      </div>
+
+      <div v-else-if="isUploading" class="uploading-indicator">
+        <div class="spinner"></div>
+        <div class="uploading-text">正在上传音频文件...</div>
       </div>
       
       <div v-else class="file-info">
@@ -50,8 +56,13 @@
       <font-awesome-icon icon="exclamation-triangle" class="error-icon" />
       {{ uploadError }}
     </div>
+
+    <div v-if="uploadSuccess" class="success-message">
+      <font-awesome-icon icon="check-circle" class="success-icon" />
+      音频文件上传成功！
+    </div>
     
-    <div v-if="audioFile && !uploadError" class="audio-player">
+    <div v-if="audioFile && !uploadError && !isUploading" class="audio-player">
       <audio 
         ref="audioPlayer" 
         controls 
@@ -69,6 +80,15 @@
       </button>
       
       <button 
+        class="btn-upload" 
+        v-if="audioFile && !uploadedFileId && !isUploading"
+        @click="uploadAudio"
+      >
+        上传音频
+        <font-awesome-icon icon="upload" class="btn-icon" />
+      </button>
+      
+      <button 
         class="btn-next" 
         @click="nextStep"
         :disabled="!isFormValid"
@@ -82,6 +102,7 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue';
+import { uploadVoiceSample } from '@/api/voice';
 
 const props = defineProps({
   formData: {
@@ -102,6 +123,10 @@ const audioUrl = ref('');
 const audioDuration = ref(null);
 const uploadError = ref('');
 const isDragging = ref(false);
+const isUploading = ref(false);
+const uploadSuccess = ref(false);
+const uploadedFileId = ref(null);
+const uploadedFileUrl = ref(null);
 
 // Initialize from props
 watch(() => props.formData, (newData) => {
@@ -111,6 +136,15 @@ watch(() => props.formData, (newData) => {
     if (audioFile.value) {
       createAudioUrl();
     }
+  }
+  
+  // Also restore uploaded file details if available
+  if (newData.uploadedFileId) {
+    uploadedFileId.value = newData.uploadedFileId;
+  }
+  
+  if (newData.uploadedFileUrl) {
+    uploadedFileUrl.value = newData.uploadedFileUrl;
   }
 }, { immediate: true, deep: true });
 
@@ -123,7 +157,7 @@ onUnmounted(() => {
 
 // Trigger file input click
 const triggerFileInput = () => {
-  if (!audioFile.value) {
+  if (!audioFile.value && !isUploading.value) {
     fileInput.value.click();
   }
 };
@@ -168,9 +202,18 @@ const handleFileChange = (event) => {
 // Validate and process audio file
 const validateAndProcessFile = (file) => {
   uploadError.value = '';
+  uploadSuccess.value = false;
+  uploadedFileId.value = null;
+  uploadedFileUrl.value = null;
   
   if (!isAudioFile(file)) {
     uploadError.value = '请上传支持的音频格式：WAV、MP3 或 M4A';
+    return;
+  }
+  
+  // Check file size (max 15MB)
+  if (file.size > 15 * 1024 * 1024) {
+    uploadError.value = '文件大小不能超过15MB';
     return;
   }
   
@@ -197,6 +240,30 @@ const validateAndProcessFile = (file) => {
   audio.src = URL.createObjectURL(file);
 };
 
+// Upload audio to the server
+const uploadAudio = async () => {
+  if (!audioFile.value || isUploading.value) return;
+  
+  try {
+    isUploading.value = true;
+    uploadError.value = '';
+    uploadSuccess.value = false;
+    
+    const result = await uploadVoiceSample(audioFile.value);
+    
+    uploadedFileId.value = result.data.fileId;
+    uploadedFileUrl.value = result.data.fileUrl;
+    uploadSuccess.value = true;
+    
+    updateParentData();
+  } catch (error) {
+    console.error('Upload error:', error);
+    uploadError.value = error.response?.data?.message || '上传失败，请重试';
+  } finally {
+    isUploading.value = false;
+  }
+};
+
 // Create object URL for audio preview
 const createAudioUrl = () => {
   if (audioUrl.value) {
@@ -212,6 +279,8 @@ const createAudioUrl = () => {
 const removeFile = () => {
   audioFile.value = null;
   audioDuration.value = null;
+  uploadSuccess.value = false;
+  // Keep the uploadedFileId for reference if it was already uploaded
   
   if (audioUrl.value) {
     URL.revokeObjectURL(audioUrl.value);
@@ -229,7 +298,9 @@ const removeFile = () => {
 const updateParentData = () => {
   emit('update:formData', { 
     ...props.formData,
-    audioFile: audioFile.value
+    audioFile: audioFile.value,
+    uploadedFileId: uploadedFileId.value,
+    uploadedFileUrl: uploadedFileUrl.value
   });
 };
 
@@ -254,7 +325,7 @@ const formatDuration = (seconds) => {
 
 // Validate form
 const isFormValid = computed(() => {
-  return audioFile.value && !uploadError.value;
+  return audioFile.value && !uploadError.value && uploadedFileId.value;
 });
 
 // Next step handler
@@ -316,6 +387,12 @@ const nextStep = () => {
   background-color: rgba(244, 67, 54, 0.05);
 }
 
+.upload-area.uploading {
+  border-color: #FF9800;
+  background-color: rgba(255, 152, 0, 0.05);
+  cursor: wait;
+}
+
 .file-input {
   display: none;
 }
@@ -340,6 +417,33 @@ const nextStep = () => {
 .upload-formats {
   font-size: 12px;
   color: #757575;
+}
+
+.uploading-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+.spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid rgba(255, 152, 0, 0.2);
+  border-top: 3px solid #FF9800;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.uploading-text {
+  font-size: 14px;
+  color: #FF9800;
+  font-weight: 500;
 }
 
 .file-info {
@@ -395,6 +499,21 @@ const nextStep = () => {
   font-size: 16px;
 }
 
+.success-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #4CAF50;
+  font-size: 14px;
+  padding: 10px;
+  background-color: rgba(76, 175, 80, 0.1);
+  border-radius: 8px;
+}
+
+.success-icon {
+  font-size: 16px;
+}
+
 .audio-player {
   margin-top: 10px;
 }
@@ -410,7 +529,7 @@ const nextStep = () => {
   margin-top: 10px;
 }
 
-.btn-back, .btn-next {
+.btn-back, .btn-next, .btn-upload {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -430,6 +549,15 @@ const nextStep = () => {
 
 .btn-back:hover {
   background-color: #e0e0e0;
+}
+
+.btn-upload {
+  background-color: #FF9800;
+  color: white;
+}
+
+.btn-upload:hover {
+  background-color: rgba(255, 152, 0, 0.8);
 }
 
 .btn-next {
