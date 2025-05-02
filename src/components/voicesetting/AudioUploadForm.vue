@@ -102,7 +102,7 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue';
-import { uploadVoiceSample } from '@/api/voice';
+import { uploadVoiceFile } from '@/api/cosyVoice';
 
 const props = defineProps({
   formData: {
@@ -125,8 +125,8 @@ const uploadError = ref('');
 const isDragging = ref(false);
 const isUploading = ref(false);
 const uploadSuccess = ref(false);
-const uploadedFileId = ref(null);
-const uploadedFileUrl = ref(null);
+const uploadedFileId = ref(props.formData.uploadedFileId || null);
+const uploadedFileUrl = ref(props.formData.uploadedFileUrl || null);
 
 // Initialize from props
 watch(() => props.formData, (newData) => {
@@ -249,13 +249,32 @@ const uploadAudio = async () => {
     uploadError.value = '';
     uploadSuccess.value = false;
     
-    const result = await uploadVoiceSample(audioFile.value);
+    // Use the uploadVoiceFile function directly with the feedback ID
+    console.log('Starting upload with feedback ID:', props.formData.feedbackId);
+    const result = await uploadVoiceFile(audioFile.value, props.formData.feedbackId);
     
-    uploadedFileId.value = result.data.fileId;
-    uploadedFileUrl.value = result.data.fileUrl;
-    uploadSuccess.value = true;
-    
-    updateParentData();
+    if (result && result.data) {
+      uploadedFileId.value = result.data.fileId;
+      uploadedFileUrl.value = result.data.fileUrl;
+      
+      // If there's a voice_id in the response, store it
+      if (result.data.voice_id) {
+        emit('update:formData', {
+          ...props.formData,
+          audioFile: audioFile.value,
+          uploadedFileId: result.data.fileId,
+          uploadedFileUrl: result.data.fileUrl,
+          voiceId: result.data.voice_id
+        });
+      } else {
+        updateParentData();
+      }
+      
+      uploadSuccess.value = true;
+    } else {
+      uploadError.value = '上传返回数据无效';
+      console.error('Invalid upload response:', result);
+    }
   } catch (error) {
     console.error('Upload error:', error);
     uploadError.value = error.response?.data?.message || '上传失败，请重试';

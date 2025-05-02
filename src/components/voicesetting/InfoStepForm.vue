@@ -110,7 +110,8 @@ const localData = ref({
   textPrompt: props.formData.textPrompt || '',
   encouragementStyle: props.formData.encouragementStyle || '',
   criticismStyle: props.formData.criticismStyle || '',
-  feedbackData: props.formData.feedbackData || null
+  feedbackData: props.formData.feedbackData || null,
+  feedbackId: props.formData.feedbackId || null
 });
 
 // Feedback state
@@ -129,7 +130,8 @@ watch(() => props.formData, (newData) => {
     textPrompt: newData.textPrompt || '',
     encouragementStyle: newData.encouragementStyle || '',
     criticismStyle: newData.criticismStyle || '',
-    feedbackData: newData.feedbackData || null
+    feedbackData: newData.feedbackData || null,
+    feedbackId: newData.feedbackId || localData.value.feedbackId || null
   };
   
   // Update the feedback data if it exists in the form data
@@ -249,6 +251,15 @@ const generateFeedback = async () => {
       feedbackData.value = result.data;
       feedbackMeta.value = result.meta;
       localData.value.feedbackData = result.data;
+      
+      // Extract and store the feedback ID from the response
+      if (result.data && result.data.id) {
+        localData.value.feedbackId = result.data.id;
+        console.log('Received feedback ID:', result.data.id);
+      } else {
+        console.warn('No feedback ID found in the response:', result);
+      }
+      
       updateData();
     } else {
       error.value = result.message || '生成反馈失败，请重试';

@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:feedback": "node scripts/openTestPage.js"
+    "test:feedback": "node scripts/openTestPage.js",
+    "test:voice-clone": "node backend/tests/voiceCloneTest.js",
+    "test:voice-upload": "node backend/tests/voiceCloneUploadTest.js",
+    "test:cosyvoice-api": "node scripts/testCosyVoiceApi.js"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^6.7.2",
@@ -29,6 +32,7 @@
     "@tailwindcss/vite": "^4.1.4",
     "@vitejs/plugin-vue": "^5.0.5",
     "autoprefixer": "^10.4.21",
+    "form-data": "^4.0.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^4.1.4",
     "vite": "^5.3.1"

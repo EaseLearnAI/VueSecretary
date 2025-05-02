@@ -24,22 +24,13 @@
         v-if="currentStep === 2" 
         :formData="formData" 
         @update:formData="updateFormData" 
-        @next-step="nextStep" 
+        @next-step="processAudioUpload" 
         @prev-step="prevStep" 
       />
       
-      <!-- Step 3: Voice Selection -->
-      <VoiceSelectionForm 
-        v-if="currentStep === 3" 
-        :formData="formData" 
-        @update:formData="updateFormData" 
-        @next-step="nextStep" 
-        @prev-step="prevStep" 
-      />
-      
-      <!-- Step 4: Generate and Listen -->
+      <!-- Step 3: Generate and Listen -->
       <GenerateAndListenForm 
-        v-if="currentStep === 4" 
+        v-if="currentStep === 3" 
         :formData="formData" 
         @update:formData="updateFormData" 
         @prev-step="prevStep" 
@@ -54,8 +45,8 @@ import { ref, computed } from 'vue';
 import StepIndicator from './StepIndicator.vue';
 import InfoStepForm from './InfoStepForm.vue';
 import AudioUploadForm from './AudioUploadForm.vue';
-import VoiceSelectionForm from './VoiceSelectionForm.vue';
 import GenerateAndListenForm from './GenerateAndListenForm.vue';
+import { uploadVoiceFile, monitorVoiceProcessing, getCosyVoicesByFeedbackId, cloneVoice } from '@/api/cosyVoice';
 
 // Define props and emits
 const props = defineProps({
@@ -71,8 +62,7 @@ const emit = defineEmits(['close', 'update:show']);
 const steps = [
   { id: 1, name: '填写信息' },
   { id: 2, name: '音频上传' },
-  { id: 3, name: '音色选择' },
-  { id: 4, name: '生成与试听' }
+  { id: 3, name: '生成与试听' }
 ];
 
 // Current step state
@@ -86,6 +76,14 @@ const formData = ref({
   audioFile: null,
   selectedVoice: null,
   generatedAudio: null,
+  feedbackId: null,
+  voiceId: null,
+  voiceFileId: null,
+  uploadedFileId: null,
+  uploadedFileUrl: null,
+  processingStatus: '',
+  error: null,
+  feedbackData: null
 });
 
 // Methods
@@ -113,6 +111,107 @@ const updateFormData = (newData) => {
   formData.value = { ...formData.value, ...newData };
 };
 
+// Process audio upload and immediately proceed to voice cloning
+const processAudioUpload = async () => {
+  try {
+    // Update processing status
+    updateFormData({ processingStatus: 'uploading' });
+    
+    // If we don't have a feedbackId, log a warning
+    if (!formData.value.feedbackId) {
+      console.warn('No feedback ID found in formData. Voice cloning may fail.', formData.value);
+    } else {
+      console.log('Using feedback ID for voice upload:', formData.value.feedbackId);
+    }
+    
+    // Upload the audio file with feedback ID - may already be done in AudioUploadForm
+    // Only proceed if formData.voiceId is not already set
+    if (!formData.value.voiceId) {
+      // The audio upload should have already been done in AudioUploadForm
+      // If we have an audioFile and uploadedFileId but no voiceId, we may need to trigger cloning
+      if (formData.value.audioFile && formData.value.uploadedFileId) {
+        updateFormData({ processingStatus: 'cloning' });
+        
+        // If we have a voiceFileId but no voice_id, we need to trigger cloning manually
+        await cloneVoice(formData.value.uploadedFileId, formData.value.feedbackId);
+        
+        // Wait a moment for the cloning to be registered
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Now query to get the cosyVoice record with the voice_id
+        const cosyVoices = await getCosyVoicesByFeedbackId(formData.value.feedbackId);
+        
+        if (cosyVoices && cosyVoices.length > 0) {
+          // Use the most recent voice record
+          const latestVoice = cosyVoices[0];
+          updateFormData({ 
+            voiceId: latestVoice.voice_id,
+            processingStatus: latestVoice.status || 'cloning' 
+          });
+        }
+      }
+    }
+    
+    // If we have a voice_id now, start monitoring the process
+    if (formData.value.voiceId) {
+      // Monitor the voice processing status
+      await monitorVoiceProcessing(
+        formData.value.voiceId,
+        (status) => {
+          const processingStatus = status.status;
+          updateFormData({ 
+            processingStatus, 
+            generatedAudio: status.synthesized_audio_url || null,
+            error: status.error || null
+          });
+        }
+      );
+    } else {
+      throw new Error('无法获取语音ID，请检查上传是否成功');
+    }
+    
+    // Proceed to the next step
+    nextStep();
+  } catch (error) {
+    console.error('Error processing audio:', error);
+    
+    // Provide more detailed error messages based on error type
+    let errorMessage = 'An unknown error occurred during audio processing.';
+    
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      const status = error.response.status;
+      
+      if (status === 404) {
+        errorMessage = 'API endpoint not found. Please check server configuration or contact support.';
+      } else if (status === 413) {
+        errorMessage = 'File is too large. Please upload a smaller audio file.';
+      } else if (status === 415) {
+        errorMessage = 'Unsupported file format. Please use MP3 or WAV files.';
+      } else if (status === 401 || status === 403) {
+        errorMessage = 'Authentication error. Please log in again.';
+      } else {
+        errorMessage = `Server error (${status}): ${error.response.data?.message || error.message}`;
+      }
+    } else if (error.request) {
+      // The request was made but no response was received
+      errorMessage = 'No response from server. Please check your internet connection.';
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      errorMessage = error.message || errorMessage;
+    }
+    
+    updateFormData({ 
+      processingStatus: 'error',
+      error: errorMessage
+    });
+    
+    // Still proceed to next step to show error message
+    nextStep();
+  }
+};
+
 const finishProcess = () => {
   // Reset the form and close the modal
   currentStep.value = 1;
@@ -123,6 +222,14 @@ const finishProcess = () => {
     audioFile: null,
     selectedVoice: null,
     generatedAudio: null,
+    feedbackId: null,
+    voiceId: null,
+    voiceFileId: null,
+    uploadedFileId: null,
+    uploadedFileUrl: null,
+    processingStatus: '',
+    error: null,
+    feedbackData: null
   };
   emit('close');
   emit('update:show', false);

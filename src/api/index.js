@@ -5,6 +5,7 @@
 
 import * as authRaw from './auth';
 import * as tasksRaw from './tasks';
+import * as cosyVoiceRaw from './cosyVoice';
 import { debugApiCall } from './debug';
 
 // Wrap all auth API methods with debug logging
@@ -58,7 +59,17 @@ const tasksApi = {
   getTaskPomodoros: debugApiCall(tasksRaw.getTaskPomodoros, 'getTaskPomodoros')
 };
 
+// Wrap all cosyVoice API methods with debug logging
+const cosyVoiceApi = {
+  uploadVoiceFile: debugApiCall(cosyVoiceRaw.uploadVoiceFile, 'uploadVoiceFile'),
+  cloneVoice: debugApiCall(cosyVoiceRaw.cloneVoice, 'cloneVoice'),
+  synthesizeVoice: debugApiCall(cosyVoiceRaw.synthesizeVoice, 'synthesizeVoice'),
+  getCosyVoiceByVoiceId: debugApiCall(cosyVoiceRaw.getCosyVoiceByVoiceId, 'getCosyVoiceByVoiceId'),
+  getCosyVoicesByFeedbackId: debugApiCall(cosyVoiceRaw.getCosyVoicesByFeedbackId, 'getCosyVoicesByFeedbackId'),
+  monitorVoiceProcessing: debugApiCall(cosyVoiceRaw.monitorVoiceProcessing, 'monitorVoiceProcessing'),
+};
+
 console.log('API services initialized with debug wrappers');
 
 // Export all API services
-export { authApi, tasksApi }; 
+export { authApi, tasksApi, cosyVoiceApi }; 

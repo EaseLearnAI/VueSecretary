@@ -3,6 +3,22 @@
  */
 import axios from 'axios';
 
+// Logger object for use in other modules
+export const logger = {
+  info: (message, data) => {
+    console.log(`ℹ️ [INFO] ${message}`, data || '');
+  },
+  success: (message, data) => {
+    console.log(`✅ [SUCCESS] ${message}`, data || '');
+  },
+  error: (message, error) => {
+    console.error(`❌ [ERROR] ${message}`, error || '');
+  },
+  warn: (message, data) => {
+    console.warn(`⚠️ [WARNING] ${message}`, data || '');
+  }
+};
+
 // Configure axios interceptors for logging
 export const setupApiLogger = () => {
   // Request interceptor
