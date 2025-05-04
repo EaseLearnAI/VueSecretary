@@ -6,7 +6,7 @@
           <div class="pomodoro-header">
             <div class="pomodoro-title">{{ task.name }}</div>
             <div class="pomodoro-subtitle" v-if="task.groupName">{{ task.groupName }}</div>
-            <button class="close-button" @click="$emit('update:modelValue', false)">
+            <button class="close-button" @click="closePomodoro">
               <font-awesome-icon icon="times" />
             </button>
           </div>
@@ -89,7 +89,7 @@ const props = defineProps({
   }
 });
 
-defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'pomodoro-result']);
 
 // Timer options
 const timerOptions = [
@@ -158,6 +158,23 @@ const stopTimer = () => {
   isPaused.value = false;
   clearInterval(timerInterval);
   timeRemaining.value = timerDuration.value;
+  
+  // Emit result with interrupted flag
+  const percentComplete = 1 - (timeRemaining.value / timerDuration.value);
+  const isSignificantProgress = percentComplete > 0.25; // More than 25% completed
+  
+  emit('pomodoro-result', {
+    taskId: props.task._id || props.task.id,
+    completed: false,
+    interrupted: true,
+    percentComplete: percentComplete,
+    significantProgress: isSignificantProgress
+  });
+  
+  // Close the modal after a short delay
+  setTimeout(() => {
+    emit('update:modelValue', false);
+  }, 500);
 };
 
 const timerComplete = () => {
@@ -167,6 +184,20 @@ const timerComplete = () => {
   // Play sound and show notification
   playTimerCompleteSound();
   showNotification();
+  
+  // Emit result with completed flag
+  emit('pomodoro-result', {
+    taskId: props.task._id || props.task.id,
+    completed: true,
+    interrupted: false,
+    percentComplete: 1,
+    significantProgress: true
+  });
+  
+  // Close the modal after a short delay
+  setTimeout(() => {
+    emit('update:modelValue', false);
+  }, 1500);
 };
 
 const playTimerCompleteSound = () => {
@@ -189,9 +220,36 @@ onUnmounted(() => {
 // Reset timer when modal is closed
 watch(() => props.modelValue, (newValue) => {
   if (!newValue && isActive.value) {
-    stopTimer();
+    // Stop the timer without closing the modal again
+    clearInterval(timerInterval);
+    isActive.value = false;
+    isPaused.value = false;
+    timeRemaining.value = timerDuration.value;
   }
 });
+
+// Add the closePomodoro method
+const closePomodoro = () => {
+  if (isActive.value) {
+    // If timer is active, consider it as interrupted
+    const percentComplete = 1 - (timeRemaining.value / timerDuration.value);
+    emit('pomodoro-result', {
+      taskId: props.task._id || props.task.id,
+      completed: false,
+      interrupted: true,
+      percentComplete: percentComplete,
+      significantProgress: percentComplete > 0.25
+    });
+  }
+  
+  // Clear timer and close modal
+  if (timerInterval) {
+    clearInterval(timerInterval);
+  }
+  isActive.value = false;
+  timeRemaining.value = timerDuration.value;
+  emit('update:modelValue', false);
+};
 </script>
 
 <style scoped>

@@ -66,6 +66,7 @@
 
 <script setup>
 import { ref } from 'vue';
+import { playTaskFeedbackAudio } from '../../api/cosyVoice';
 
 const props = defineProps({
   tasks: {
@@ -123,9 +124,45 @@ const getPriorityText = (priority) => {
 };
 
 // Task operations
-const updateTaskStatus = (task) => {
-  // In a real app, this would update the backend
-  console.log(`Task ${task.id} ${task.completed ? 'completed' : 'uncompleted'}`);
+const updateTaskStatus = async (task) => {
+  // Log task status change
+  console.log(`Task ${task._id || task.id} ${task.completed ? 'completed' : 'uncompleted'}`);
+  
+  // Play audio feedback when task is completed
+  if (task.completed) {
+    console.log('Playing encouraging audio for direct task completion');
+    const audioElement = await playTaskFeedbackAudio(true);
+    
+    if (audioElement) {
+      console.log('Encouraging audio playback initiated for direct completion');
+      
+      // Add a visual notification as well
+      setTimeout(() => {
+        const notification = document.createElement('div');
+        notification.textContent = '🎉 任务完成!';
+        notification.style.cssText = `
+          position: fixed;
+          bottom: 20px;
+          right: 20px;
+          background-color: #4CAF50;
+          color: white;
+          padding: 12px 20px;
+          border-radius: 4px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+          z-index: 9999;
+          font-weight: bold;
+        `;
+        document.body.appendChild(notification);
+        setTimeout(() => {
+          document.body.removeChild(notification);
+        }, 3000);
+      }, 300);
+    } else {
+      console.warn('Failed to play encouraging audio for direct task completion');
+    }
+  }
+  
+  // In a real app, this would update the backend as well
 };
 
 const handleTaskAction = (action, groupId, taskId) => {

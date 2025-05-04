@@ -36,7 +36,7 @@
           :habits="habitsStore.habits"
           :selectedHabitIndex="habitsStore.selectedHabitIndex"
           @select-habit="habitsStore.selectHabit"
-          @toggle-complete="habitsStore.toggleComplete"
+          @toggle-complete="handleToggleComplete"
           @toggle-style="habitsStore.toggleHabitStyle"
           @delete-habit="habitsStore.deleteHabit"
           @edit-habit="openEditModal"
@@ -76,6 +76,7 @@ import HabitHeader from '@/components/habits/HabitHeader.vue';
 import HabitGrid from '@/components/habits/HabitGrid.vue';
 import FloatingButton from '@/components/habits/FloatingButton.vue';
 import AddHabitModal from '@/components/habits/AddHabitModal.vue';
+import { playTaskFeedbackAudio } from '@/api/cosyVoice';
 import '@/components/habits/HabitsGlobalStyles.css';
 
 // Initialize the habits store
@@ -126,6 +127,56 @@ const updateHabit = async (habitData) => {
     closeEditModal();
   } catch (error) {
     console.error('更新习惯失败:', error);
+  }
+};
+
+// Handle toggle complete with audio feedback
+const handleToggleComplete = async (habitId, isComplete) => {
+  try {
+    await habitsStore.toggleComplete(habitId);
+    
+    // Play encouraging audio feedback if habit is marked as complete
+    if (isComplete) {
+      console.log('Playing encouraging audio for completed habit');
+      const audioElement = await playTaskFeedbackAudio(true);
+      
+      if (audioElement) {
+        console.log('Encouraging audio playback initiated for habit completion');
+        
+        // Add a visual notification as well
+        setTimeout(() => {
+          const notification = document.createElement('div');
+          notification.textContent = '🎯 习惯坚持成功!';
+          notification.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 9999;
+            font-weight: bold;
+          `;
+          document.body.appendChild(notification);
+          setTimeout(() => {
+            document.body.removeChild(notification);
+          }, 3000);
+        }, 300);
+      } else {
+        console.warn('Failed to play encouraging audio for habit completion, check browser audio permissions');
+        
+        // Show a visible notification anyway
+        setTimeout(() => {
+          const habit = habitsStore.habits.find(h => h._id === habitId);
+          const habitName = habit ? habit.name : '习惯';
+          alert(`${habitName} 完成！继续保持！`);
+        }, 300);
+      }
+    }
+  } catch (error) {
+    console.error('切换习惯状态失败:', error);
   }
 };
 

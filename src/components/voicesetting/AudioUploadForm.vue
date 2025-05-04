@@ -271,6 +271,13 @@ const uploadAudio = async () => {
       }
       
       uploadSuccess.value = true;
+      
+      // Show success message briefly, then automatically proceed to next step
+      setTimeout(() => {
+        if (isFormValid.value) {
+          emit('next-step');
+        }
+      }, 800); // Short delay to show success message
     } else {
       uploadError.value = '上传返回数据无效';
       console.error('Invalid upload response:', result);

@@ -3,6 +3,17 @@
   <div class="voice-setting-modal">
     <div class="voice-setting-header">
       <h2 class="voice-setting-title">个性化语音合成</h2>
+      <div class="test-buttons">
+        <button class="test-audio-btn" @click="testAudio" title="测试音频">
+          <font-awesome-icon icon="volume-up" />
+        </button>
+        <button class="test-audio-btn test-encourage" @click="testEncourageAudio" title="测试鼓励音频">
+          <font-awesome-icon icon="thumbs-up" />
+        </button>
+        <button class="test-audio-btn test-criticize" @click="testCriticizeAudio" title="测试批评音频">
+          <font-awesome-icon icon="thumbs-down" />
+        </button>
+      </div>
       <button class="close-button" @click="$emit('close')">
         <font-awesome-icon icon="times" />
       </button>
@@ -46,7 +57,7 @@ import StepIndicator from './StepIndicator.vue';
 import InfoStepForm from './InfoStepForm.vue';
 import AudioUploadForm from './AudioUploadForm.vue';
 import GenerateAndListenForm from './GenerateAndListenForm.vue';
-import { uploadVoiceFile, monitorVoiceProcessing, getCosyVoicesByFeedbackId, cloneVoice } from '@/api/cosyVoice';
+import { uploadVoiceFile, monitorVoiceProcessing, getCosyVoicesByFeedbackId, cloneVoice, playTestSound, playDirectFeedbackAudio, getDefaultFeedbackId } from '@/api/cosyVoice';
 
 // Define props and emits
 const props = defineProps({
@@ -56,7 +67,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['close', 'update:show']);
+const emit = defineEmits(['update:show', 'close', 'finish']);
 
 // Steps configuration
 const steps = [
@@ -231,8 +242,56 @@ const finishProcess = () => {
     error: null,
     feedbackData: null
   };
+  
+  // Emit events
   emit('close');
   emit('update:show', false);
+  emit('finish');
+};
+
+// Test audio playback
+const testAudio = () => {
+  console.log('Testing audio playback...');
+  const success = playTestSound(440, 500, 0.3);
+  
+  if (success) {
+    console.log('Audio test successful');
+  } else {
+    console.warn('Audio test failed');
+    alert('Audio playback test failed. Please check your browser settings.');
+  }
+};
+
+// Test encourage audio
+const testEncourageAudio = async () => {
+  console.log('Testing encourage audio...');
+  const defaultFeedbackId = getDefaultFeedbackId();
+  console.log(`Using default feedback ID: ${defaultFeedbackId}`);
+  
+  const audioElement = await playDirectFeedbackAudio(defaultFeedbackId, true);
+  
+  if (audioElement) {
+    console.log('Encourage audio test successful');
+  } else {
+    console.warn('Encourage audio test failed');
+    alert('Encourage audio test failed. Server response might be missing audio URL.');
+  }
+};
+
+// Test criticize audio
+const testCriticizeAudio = async () => {
+  console.log('Testing criticize audio...');
+  const defaultFeedbackId = getDefaultFeedbackId();
+  console.log(`Using default feedback ID: ${defaultFeedbackId}`);
+  
+  const audioElement = await playDirectFeedbackAudio(defaultFeedbackId, false);
+  
+  if (audioElement) {
+    console.log('Criticize audio test successful');
+  } else {
+    console.warn('Criticize audio test failed');
+    alert('Criticize audio test failed. Server response might be missing audio URL.');
+  }
 };
 </script>
 
@@ -279,6 +338,40 @@ const finishProcess = () => {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+  flex: 1;
+}
+
+.test-buttons {
+  display: flex;
+  gap: 5px;
+  margin-right: 10px;
+}
+
+.test-audio-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #0A84FF;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.test-audio-btn.test-encourage {
+  color: #4CAF50;
+}
+
+.test-audio-btn.test-criticize {
+  color: #FF5252;
+}
+
+.test-audio-btn:hover {
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
 .close-button {

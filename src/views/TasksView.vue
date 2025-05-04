@@ -107,7 +107,12 @@
     </ModalContainer>
     
     <!-- Pomodoro Modal -->
-    <TaskPomodoro v-if="selectedTask" v-model="showPomodoroModal" :task="selectedTask" />
+    <TaskPomodoro 
+      v-if="selectedTask" 
+      v-model="showPomodoroModal" 
+      :task="selectedTask" 
+      @pomodoro-result="handlePomodoroResult"
+    />
     
     <!-- Settings Panel -->
     <div class="settings-panel-overlay" v-if="showSettingsPanel" @click="closeSettingsPanel"></div>
@@ -215,6 +220,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTasksStore } from '../stores/tasksStore';
 import { authApi, tasksApi } from '../api';
+import { playTaskFeedbackAudio } from '../api/cosyVoice';
 import BaseLayout from '../components/layout/BaseLayout.vue';
 import ModalContainer from '../components/layout/ModalContainer.vue';
 import TaskList from '../components/tasks/TaskList.vue';
@@ -456,6 +462,81 @@ const selectTask = (task) => {
   console.log('Task selected for pomodoro:', task);
   selectedTask.value = task;
   showPomodoroModal.value = true;
+};
+
+// Handle pomodoro completion or interruption
+const handlePomodoroResult = async (result) => {
+  console.log('Pomodoro result:', result);
+  
+  try {
+    if (result.completed) {
+      // Play encouraging audio when task is completed
+      console.log('Playing encouraging audio for completed task');
+      const audioElement = await playTaskFeedbackAudio(true);
+      
+      if (audioElement) {
+        console.log('Encouraging audio playback initiated');
+        
+        // Add a visual notification as well
+        setTimeout(() => {
+          const notification = document.createElement('div');
+          notification.textContent = '🎉 任务完成!';
+          notification.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 9999;
+            font-weight: bold;
+          `;
+          document.body.appendChild(notification);
+          setTimeout(() => {
+            document.body.removeChild(notification);
+          }, 3000);
+        }, 300);
+      } else {
+        console.warn('Failed to play encouraging audio, check browser audio permissions');
+      }
+    } else if (result.interrupted) {
+      // Play criticism audio when task is interrupted
+      console.log('Playing criticism audio for interrupted task');
+      const audioElement = await playTaskFeedbackAudio(false);
+      
+      if (audioElement) {
+        console.log('Criticism audio playback initiated');
+        
+        // Add a visual notification as well
+        setTimeout(() => {
+          const notification = document.createElement('div');
+          notification.textContent = '⚠️ 番茄钟未完成';
+          notification.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #f44336;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 9999;
+            font-weight: bold;
+          `;
+          document.body.appendChild(notification);
+          setTimeout(() => {
+            document.body.removeChild(notification);
+          }, 3000);
+        }, 300);
+      } else {
+        console.warn('Failed to play criticism audio, check browser audio permissions');
+      }
+    }
+  } catch (error) {
+    console.error('Error handling pomodoro result:', error);
+  }
 };
 
 // Voice setting modal

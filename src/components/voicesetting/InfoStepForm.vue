@@ -261,6 +261,14 @@ const generateFeedback = async () => {
       }
       
       updateData();
+      
+      // Scroll to the bottom to show the feedback
+      setTimeout(() => {
+        window.scrollTo({
+          top: document.body.scrollHeight,
+          behavior: 'smooth'
+        });
+      }, 100);
     } else {
       error.value = result.message || '生成反馈失败，请重试';
     }

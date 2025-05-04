@@ -92,16 +92,22 @@
         </div>
         
         <div class="progress-status">{{ progressStatus }}</div>
+        
+        <div class="loading-animation" v-if="formData.processingStatus === 'synthesizing'">
+          <div class="loading-dot"></div>
+          <div class="loading-dot"></div>
+          <div class="loading-dot"></div>
+        </div>
       </div>
       
       <div v-if="formData.processingStatus === 'error'" class="retry-section">
-        <button 
+      <button 
           class="retry-btn" 
           @click="$emit('prev-step')"
-        >
+      >
           <font-awesome-icon icon="arrow-left" class="btn-icon" />
           返回重试
-        </button>
+      </button>
       </div>
     </div>
     
@@ -136,9 +142,9 @@
       </div>
       
       <div class="download-section">
-        <button class="download-btn" @click="downloadAudio">
-          <font-awesome-icon icon="download" class="btn-icon" />
-          下载音频
+        <button class="download-btn" @click="saveVoice">
+          <font-awesome-icon icon="save" class="btn-icon" />
+          保存音频
         </button>
       </div>
     </div>
@@ -176,7 +182,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['update:formData', 'prev-step', 'finish']);
+const emit = defineEmits(['update:formData', 'finish', 'prev-step']);
 
 // Audio player references
 const audioPlayer = ref(null);
@@ -367,16 +373,31 @@ const formatTime = (timeInSeconds) => {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
-// Download the generated audio
-const downloadAudio = () => {
+// Replace downloadAudio with saveVoice
+const saveVoice = () => {
   if (!props.formData.generatedAudio) return;
   
-  const link = document.createElement('a');
-  link.href = props.formData.generatedAudio;
-  link.download = `synthesized_voice_${Date.now()}.mp3`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  console.log('Saving voice ID:', props.formData.voiceId);
+  
+  // Store the voice ID in localStorage for future reference
+  if (props.formData.voiceId && props.formData.feedbackId) {
+    const voiceData = {
+      voiceId: props.formData.voiceId,
+      feedbackId: props.formData.feedbackId,
+      timestamp: Date.now()
+    };
+    
+    localStorage.setItem('savedVoiceData', JSON.stringify(voiceData));
+    
+    // Show a success notification
+    alert('音频已保存，将用于任务提醒');
+    
+    // Close the modal
+    emit('finish');
+  } else {
+    console.error('Missing voiceId or feedbackId:', props.formData);
+    alert('保存失败，缺少必要的语音信息');
+  }
 };
 
 // Clean up on component destruction
@@ -741,5 +762,34 @@ onMounted(() => {
     background-color: #2C2C2E;
     color: white;
   }
+}
+
+.loading-animation {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.loading-dot {
+  width: 8px;
+  height: 8px;
+  margin: 0 4px;
+  border-radius: 50%;
+  background-color: #0A84FF;
+  opacity: 0.6;
+  animation: dot-flashing 1s infinite alternate;
+}
+
+.loading-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.loading-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes dot-flashing {
+  0% { opacity: 0.2; transform: scale(1); }
+  100% { opacity: 1; transform: scale(1.2); }
 }
 </style> 
