@@ -31,6 +31,7 @@
         @click="selectDay(dayInfo.date)"
       >
         {{ dayInfo.day }}
+        <div v-if="dayInfo.hasTasks" class="task-dot"></div>
       </div>
     </div>
     
@@ -38,96 +39,109 @@
     <div class="task-panel">
       <div class="task-panel-header">
         <div class="task-panel-title">{{ selectedDateDisplay }}</div>
-        <div class="task-count">{{ completedTasksCount }}项已完成</div>
+        <button class="add-task-btn" @click="showCreateTaskModal = true">
+          <font-awesome-icon icon="plus" />
+          添加任务
+        </button>
       </div>
       
-      <div v-if="tasksForSelectedDate.length > 0" class="task-list">
+      <div v-if="isLoading" class="loading-container">
+        <font-awesome-icon icon="spinner" spin class="loading-icon" />
+        <div>加载中...</div>
+      </div>
+      
+      <div v-else-if="tasksForSelectedDate.length > 0" class="task-list">
         <div 
           v-for="(task, index) in tasksForSelectedDate" 
-          :key="task.id"
+          :key="task._id || task.id"
           class="task-list-item"
           :style="{ '--index': index }"
+          @click="openTaskDetail(task)"
         >
-          <div class="task-icon" :style="{ backgroundColor: task.color }">
-            <font-awesome-icon :icon="task.icon" />
+          <div class="task-status">
+            <input 
+              type="checkbox" 
+              :checked="task.completed"
+              @click.stop="toggleTaskStatus(task)"
+            />
           </div>
-          <div class="task-details">
-            <div class="task-name">{{ task.name }}</div>
-            <div class="task-time">{{ task.timeRange }}</div>
+          
+          <div class="task-content">
+            <div class="task-name" :class="{ 'completed': task.completed }">
+              {{ task.name }}
+            </div>
+            
+            <div class="task-meta">
+              <span class="task-group" v-if="task.groupId && task.groupId.name">
+                {{ task.groupId.name }}
+              </span>
+              
+              <span class="priority-badge" :class="getPriorityClass(task.priority)">
+                {{ getPriorityText(task.priority) }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
       
       <div v-else class="no-tasks">
         <font-awesome-icon icon="calendar-day" class="no-tasks-icon" />
-        <div>{{ selectedDate && isSameDay(selectedDate, new Date()) ? '今天' : '这天' }}没有完成的任务</div>
+        <div>{{ selectedDate && isSameDay(selectedDate, new Date()) ? '今天' : '这天' }}没有任务</div>
+        <button class="btn btn-primary add-task-empty" @click="showCreateTaskModal = true">
+          <font-awesome-icon icon="plus" />
+          添加任务
+        </button>
       </div>
     </div>
+    
+    <!-- Task Create Modal -->
+    <Teleport to="body">
+      <div v-if="showCreateTaskModal" class="modal-overlay" @click="closeCreateModal">
+        <div class="modal-container" @click.stop>
+          <CalendarCreateTask 
+            :selectedDate="selectedDate"
+            @close="closeCreateModal"
+            @task-created="handleTaskCreated"
+          />
+        </div>
+      </div>
+    </Teleport>
+    
+    <!-- Task Detail Modal -->
+    <Teleport to="body">
+      <div v-if="selectedTask" class="modal-overlay" @click="closeTaskDetail">
+        <div class="modal-container" @click.stop>
+          <CalendarTaskDetail 
+            :task="selectedTask"
+            @close="closeTaskDetail"
+            @update:task="handleTaskUpdated"
+            @delete:task="handleTaskDeleted"
+          />
+        </div>
+      </div>
+    </Teleport>
   </BaseLayout>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import BaseLayout from '../components/layout/BaseLayout.vue';
+import CalendarCreateTask from '../components/calendar/CalendarCreateTask.vue';
+import CalendarTaskDetail from '../components/calendar/CalendarTaskDetail.vue';
+import { getCalendarTasks, updateCalendarTask } from '../api/calendar';
 
 // Calendar data
 const currentDate = ref(new Date());
 const selectedDate = ref(new Date());
 
+// Tasks state
+const tasks = ref([]);
+const isLoading = ref(false);
+const selectedTask = ref(null);
+const showCreateTaskModal = ref(false);
+
 // Weekdays
 const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-
-// Tasks data (in a real app, this would come from API)
-const tasks = [
-  { 
-    id: 1, 
-    name: '早晨锻炼', 
-    date: new Date(2023, 5, 1),  // June 1
-    timeRange: '07:00 - 08:00',
-    icon: 'running',
-    color: '#FF9500'
-  },
-  { 
-    id: 2, 
-    name: '项目会议', 
-    date: new Date(2023, 5, 1),  // June 1
-    timeRange: '10:00 - 11:30',
-    icon: 'briefcase',
-    color: '#007AFF'
-  },
-  { 
-    id: 3, 
-    name: '阅读时间', 
-    date: new Date(2023, 5, 1),  // June 1
-    timeRange: '19:00 - 20:00',
-    icon: 'book',
-    color: '#5AC8FA'
-  },
-  { 
-    id: 4, 
-    name: '医生预约', 
-    date: new Date(2023, 5, 5),  // June 5
-    timeRange: '14:30 - 15:30',
-    icon: 'user-md',
-    color: '#FF2D55'
-  },
-  { 
-    id: 5, 
-    name: '团队建设', 
-    date: new Date(2023, 5, 10),  // June 10
-    timeRange: '15:00 - 17:00',
-    icon: 'users',
-    color: '#007AFF'
-  },
-  { 
-    id: 6, 
-    name: '购物', 
-    date: new Date(2023, 5, 15),  // June 15
-    timeRange: '11:00 - 13:00',
-    icon: 'shopping-cart',
-    color: '#FF9500'
-  }
-];
 
 // Helper functions
 const isSameDay = (date1, date2) => {
@@ -136,8 +150,16 @@ const isSameDay = (date1, date2) => {
          date1.getFullYear() === date2.getFullYear();
 };
 
+const formatDate = (date) => {
+  return date.toISOString().split('T')[0];
+};
+
+// 给定日期是否有任务
 const hasTasksOnDate = (date) => {
-  return tasks.some(task => isSameDay(task.date, date));
+  return tasks.value.some(task => {
+    const taskDate = new Date(task.dueDate);
+    return isSameDay(taskDate, date);
+  });
 };
 
 // Display formatted strings
@@ -154,18 +176,18 @@ const calendarDays = computed(() => {
   const year = currentDate.value.getFullYear();
   const month = currentDate.value.getMonth();
   
-  // First day of the month (0 = Sunday, 1 = Monday, etc.)
+  // 月份的第一天是星期几 (0 = 星期日, 1 = 星期一, etc.)
   const firstDay = new Date(year, month, 1).getDay();
   
-  // Number of days in the month
+  // 这个月有多少天
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   
-  // Previous month's days to display
+  // 上个月的天数
   const daysInPrevMonth = new Date(year, month, 0).getDate();
   
   const days = [];
   
-  // Add days from previous month
+  // 添加上个月的日期
   for (let i = 0; i < firstDay; i++) {
     const day = daysInPrevMonth - firstDay + i + 1;
     const date = new Date(year, month - 1, day);
@@ -179,7 +201,7 @@ const calendarDays = computed(() => {
     });
   }
   
-  // Add days for current month
+  // 添加当前月的日期
   for (let i = 1; i <= daysInMonth; i++) {
     const date = new Date(year, month, i);
     days.push({
@@ -192,10 +214,10 @@ const calendarDays = computed(() => {
     });
   }
   
-  // Calculate remaining cells to fill (up to 6 rows x 7 days = 42 cells)
+  // 计算剩余的单元格 (最多 6 行 x 7 天 = 42 格)
   const remainingCells = 42 - days.length;
   
-  // Add days from next month
+  // 添加下个月的日期
   for (let i = 1; i <= remainingCells; i++) {
     const date = new Date(year, month + 1, i);
     days.push({
@@ -211,16 +233,43 @@ const calendarDays = computed(() => {
   return days;
 });
 
-// Tasks for selected date
+// 当前选择日期的任务
 const tasksForSelectedDate = computed(() => {
-  return tasks.filter(task => selectedDate.value && isSameDay(task.date, selectedDate.value));
+  if (!selectedDate.value) return [];
+  
+  return tasks.value.filter(task => {
+    const taskDate = new Date(task.dueDate);
+    return isSameDay(taskDate, selectedDate.value);
+  });
 });
 
-const completedTasksCount = computed(() => {
-  return tasksForSelectedDate.value.length;
-});
+// 加载月份任务数据
+const loadMonthTasks = async () => {
+  try {
+    isLoading.value = true;
+    
+    // 获取当前月的第一天和最后一天
+    const year = currentDate.value.getFullYear();
+    const month = currentDate.value.getMonth();
+    const startDate = new Date(year, month, 1);
+    const endDate = new Date(year, month + 1, 0);
+    
+    const params = {
+      startDate: formatDate(startDate),
+      endDate: formatDate(endDate)
+    };
+    
+    console.log(`加载 ${startDate.toLocaleDateString()} 到 ${endDate.toLocaleDateString()} 的任务`);
+    
+    tasks.value = await getCalendarTasks(params);
+  } catch (error) {
+    console.error('加载任务失败:', error);
+  } finally {
+    isLoading.value = false;
+  }
+};
 
-// Calendar navigation
+// 日历导航
 const previousMonth = () => {
   currentDate.value = new Date(
     currentDate.value.getFullYear(),
@@ -237,15 +286,98 @@ const nextMonth = () => {
   );
 };
 
-// Day selection
+// 选择日期
 const selectDay = (date) => {
   selectedDate.value = date;
 };
 
-// Initialize calendar
+// 打开任务详情
+const openTaskDetail = (task) => {
+  selectedTask.value = task;
+};
+
+// 关闭任务详情
+const closeTaskDetail = () => {
+  selectedTask.value = null;
+};
+
+// 关闭创建任务模态框
+const closeCreateModal = () => {
+  showCreateTaskModal.value = false;
+};
+
+// 优先级样式
+const getPriorityClass = (priority) => {
+  switch (priority) {
+    case 'high': return 'priority-high';
+    case 'medium': return 'priority-medium';
+    case 'low': return 'priority-low';
+    default: return 'priority-medium';
+  }
+};
+
+// 优先级文本
+const getPriorityText = (priority) => {
+  switch (priority) {
+    case 'high': return '高';
+    case 'medium': return '中';
+    case 'low': return '低';
+    default: return '中';
+  }
+};
+
+// 切换任务状态
+const toggleTaskStatus = async (task) => {
+  try {
+    const taskId = task._id || task.id;
+    const updateData = {
+      completed: !task.completed
+    };
+    
+    const updatedTask = await updateCalendarTask(taskId, updateData);
+    
+    // 更新本地任务列表
+    const index = tasks.value.findIndex(t => (t._id || t.id) === taskId);
+    if (index !== -1) {
+      tasks.value[index] = updatedTask;
+    }
+  } catch (error) {
+    console.error('更新任务状态失败:', error);
+  }
+};
+
+// 处理任务创建事件
+const handleTaskCreated = (newTask) => {
+  tasks.value.push(newTask);
+};
+
+// 处理任务更新事件
+const handleTaskUpdated = (updatedTask) => {
+  const taskId = updatedTask._id || updatedTask.id;
+  const index = tasks.value.findIndex(task => (task._id || task.id) === taskId);
+  
+  if (index !== -1) {
+    tasks.value[index] = updatedTask;
+  }
+};
+
+// 处理任务删除事件
+const handleTaskDeleted = (taskId) => {
+  tasks.value = tasks.value.filter(task => (task._id || task.id) !== taskId);
+};
+
+// 当月份改变时重新加载任务
+watch(() => currentDate.value, (newDate) => {
+  loadMonthTasks();
+});
+
+// 页面加载时初始化
 onMounted(() => {
-  // Select today by default
+  // 选择今天
   selectDay(new Date());
+  
+  // 加载当前月份的任务
+  loadMonthTasks();
 });
 </script>
 
@@ -320,17 +452,16 @@ onMounted(() => {
   color: white;
 }
 
-.calendar-day.has-tasks::after {
-  content: '';
+.task-dot {
   position: absolute;
-  bottom: 4px;
+  bottom: 6px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background-color: var(--app-primary);
 }
 
-.calendar-day.today.has-tasks::after {
+.calendar-day.today .task-dot {
   background-color: white;
 }
 
@@ -367,49 +498,83 @@ onMounted(() => {
   font-size: 18px;
 }
 
-.task-count {
+.add-task-btn {
+  background-color: var(--app-primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
   font-size: 14px;
-  color: var(--app-gray);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .task-list-item {
   display: flex;
-  align-items: center;
-  padding: 12px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--app-border);
   animation: fadeIn 0.3s ease forwards;
   animation-delay: calc(var(--index) * 0.1s);
   opacity: 0;
+  cursor: pointer;
 }
 
 .task-list-item:last-child {
   border-bottom: none;
 }
 
-.task-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+.task-status {
   margin-right: 12px;
-  color: white;
-  font-size: 16px;
 }
 
-.task-details {
+.task-content {
   flex: 1;
 }
 
 .task-name {
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
-.task-time {
-  font-size: 14px;
+.task-name.completed {
+  text-decoration: line-through;
   color: var(--app-gray);
+}
+
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.task-group {
+  color: var(--app-primary);
+  font-weight: 500;
+}
+
+.priority-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.priority-high {
+  background-color: #FF2D55;
+  color: white;
+}
+
+.priority-medium {
+  background-color: #FF9500;
+  color: white;
+}
+
+.priority-low {
+  background-color: #30B650;
+  color: white;
 }
 
 .no-tasks {
@@ -418,12 +583,72 @@ onMounted(() => {
   color: var(--app-gray);
   font-size: 16px;
   animation: fadeIn 0.5s ease forwards;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
 }
 
 .no-tasks-icon {
   font-size: 32px;
-  margin-bottom: 16px;
   opacity: 0.5;
+}
+
+.add-task-empty {
+  margin-top: 16px;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  color: var(--app-gray);
+}
+
+.loading-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-container {
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: 16px;
+}
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+}
+
+.btn-primary {
+  background-color: var(--app-primary);
+  color: white;
 }
 
 /* Dark mode adjustments */
@@ -438,6 +663,10 @@ onMounted(() => {
   
   .task-list-item {
     border-color: var(--app-border);
+  }
+  
+  .modal-overlay {
+    background-color: rgba(0, 0, 0, 0.7);
   }
 }
 
