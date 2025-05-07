@@ -42,11 +42,15 @@
             </div>
           </div>
           <div class="task-actions">
+            <button class="action-btn pomodoro-history-btn" @click.stop="viewTaskPomodoroHistory(task, group)">
+              <font-awesome-icon icon="history" class="action-icon" />
+            </button>
             <el-dropdown trigger="click" @command="handleTaskAction($event, group.id, task.id)">
               <font-awesome-icon icon="ellipsis-vertical" class="more-icon" role="button" focusable="true" aria-label="任务操作" />
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="edit">编辑</el-dropdown-item>
+                  <el-dropdown-item command="pomodoro-history">查看番茄钟记录</el-dropdown-item>
                   <el-dropdown-item command="delete" class="danger-item">删除</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -75,7 +79,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['task-clicked', 'edit-task']);
+const emit = defineEmits(['task-clicked', 'edit-task', 'view-pomodoro-history']);
 
 // Group expansion handling
 const expandedGroups = ref([1]); // Initially expand the first group
@@ -181,6 +185,21 @@ const handleTaskAction = (action, groupId, taskId) => {
         });
       }
     }
+  } else if (action === 'pomodoro-history') {
+    // 查看番茄钟历史记录
+    const groupIndex = props.tasks.findIndex(g => g._id === groupId || g.id === groupId);
+    if (groupIndex !== -1) {
+      const taskIndex = props.tasks[groupIndex].tasks.findIndex(t => t._id === taskId || t.id === taskId);
+      if (taskIndex !== -1) {
+        const task = props.tasks[groupIndex].tasks[taskIndex];
+        console.log(`View pomodoro history for task ${taskId} in group ${groupId}`);
+        emit('view-pomodoro-history', { 
+          ...task, 
+          groupId: props.tasks[groupIndex]._id || props.tasks[groupIndex].id,
+          groupName: props.tasks[groupIndex].name
+        });
+      }
+    }
   } else if (action === 'delete') {
     // Confirm and delete (would have a confirmation in a real app)
     const groupIndex = props.tasks.findIndex(g => g._id === groupId || g.id === groupId);
@@ -191,6 +210,15 @@ const handleTaskAction = (action, groupId, taskId) => {
       }
     }
   }
+};
+
+// 查看任务的番茄钟历史记录
+const viewTaskPomodoroHistory = (task, group) => {
+  emit('view-pomodoro-history', { 
+    ...task, 
+    groupId: group.id, 
+    groupName: group.name 
+  });
 };
 </script>
 
@@ -325,18 +353,39 @@ const handleTaskAction = (action, groupId, taskId) => {
 }
 
 .task-actions {
-  margin-left: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  color: var(--app-gray);
+  cursor: pointer;
+  font-size: 15px;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.pomodoro-history-btn {
+  color: var(--app-primary);
+}
+
+.pomodoro-history-btn:hover {
+  background-color: rgba(var(--app-primary-rgb), 0.1);
 }
 
 .more-icon {
+  font-size: 15px;
   color: var(--app-gray);
-  padding: 8px;
   cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.more-icon:hover {
-  color: var(--app-dark);
+  padding: 4px 6px;
 }
 
 .no-tasks {

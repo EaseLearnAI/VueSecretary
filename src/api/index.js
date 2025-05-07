@@ -6,6 +6,7 @@
 import * as authRaw from './auth';
 import * as tasksRaw from './tasks';
 import * as cosyVoiceRaw from './cosyVoice';
+import * as statsRaw from './stats';
 import { debugApiCall } from './debug';
 
 // Wrap all auth API methods with debug logging
@@ -69,7 +70,15 @@ const cosyVoiceApi = {
   monitorVoiceProcessing: debugApiCall(cosyVoiceRaw.monitorVoiceProcessing, 'monitorVoiceProcessing'),
 };
 
+// Wrap all stats API methods with debug logging
+const statsApi = {
+  getTodaySummary: debugApiCall(statsRaw.getTodaySummary, 'getTodaySummary'),
+  getTrends: debugApiCall(statsRaw.getTrends, 'getTrends'),
+  getMonthlySummary: debugApiCall(statsRaw.getMonthlySummary, 'getMonthlySummary'),
+  exportReport: debugApiCall(statsRaw.exportReport, 'exportReport'),
+};
+
 console.log('API services initialized with debug wrappers');
 
 // Export all API services
-export { authApi, tasksApi, cosyVoiceApi }; 
+export { authApi, tasksApi, cosyVoiceApi, statsApi }; 

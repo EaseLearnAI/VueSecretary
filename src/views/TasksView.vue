@@ -36,7 +36,7 @@
     </div>
     
     <template v-else>
-      <TaskList v-if="viewMode === 'list'" :tasks="tasksStore.taskGroups" @task-clicked="selectTask" @edit-task="handleEditTask" />
+      <TaskList v-if="viewMode === 'list'" :tasks="tasksStore.taskGroups" @task-clicked="selectTask" @edit-task="handleEditTask" @view-pomodoro-history="viewPomodoroHistory" />
       <TaskQuadrant v-else :tasks="tasksStore.flatTasks" @task-clicked="selectTask" />
       
       <!-- Empty state -->
@@ -113,6 +113,19 @@
       :task="selectedTask" 
       @pomodoro-result="handlePomodoroResult"
     />
+    
+    <!-- Pomodoro History Modal -->
+    <ModalContainer 
+      v-if="selectedPomodoroHistory" 
+      v-model="showPomodoroHistoryModal" 
+      :title="`${selectedPomodoroHistory.name} 的番茄钟记录`"
+    >
+      <TaskPomodoroHistory 
+        :task="selectedPomodoroHistory"
+        @close="closePomodoroHistory"
+        @session-deleted="refreshTasks"
+      />
+    </ModalContainer>
     
     <!-- Settings Panel -->
     <div class="settings-panel-overlay" v-if="showSettingsPanel" @click="closeSettingsPanel"></div>
@@ -216,16 +229,17 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTasksStore } from '../stores/tasksStore';
-import { authApi, tasksApi } from '../api';
+import { authApi } from '../api';
 import { playTaskFeedbackAudio } from '../api/cosyVoice';
 import BaseLayout from '../components/layout/BaseLayout.vue';
 import ModalContainer from '../components/layout/ModalContainer.vue';
 import TaskList from '../components/tasks/TaskList.vue';
 import TaskQuadrant from '../components/tasks/TaskQuadrant.vue';
 import TaskPomodoro from '../components/tasks/TaskPomodoro.vue';
+import TaskPomodoroHistory from '../components/tasks/TaskPomodoroHistory.vue';
 import VoiceSettingModal from '../components/voicesetting/VoiceSettingModal.vue';
 
 const router = useRouter();
@@ -300,7 +314,7 @@ const submitFeedback = () => {
   if (!feedbackText.value.trim()) return;
   
   console.log('Submitting feedback:', feedbackText.value);
-  // Here you would typically send this to your backend API
+  // 这里可以使用API发送反馈，但目前仅记录到控制台
   
   // Show success message
   showFeedbackSuccess.value = true;
@@ -457,11 +471,35 @@ const saveTask = async () => {
 // Pomodoro handling
 const selectedTask = ref(null);
 const showPomodoroModal = ref(false);
+const selectedPomodoroHistory = ref(null);
+const showPomodoroHistoryModal = ref(false);
 
 const selectTask = (task) => {
   console.log('Task selected for pomodoro:', task);
   selectedTask.value = task;
   showPomodoroModal.value = true;
+};
+
+// 打开任务的番茄钟历史记录
+const viewPomodoroHistory = (task) => {
+  console.log('Opening pomodoro history for task:', task);
+  selectedPomodoroHistory.value = task;
+  showPomodoroHistoryModal.value = true;
+};
+
+// 关闭番茄钟历史记录
+const closePomodoroHistory = () => {
+  selectedPomodoroHistory.value = null;
+  showPomodoroHistoryModal.value = false;
+};
+
+// 刷新任务列表
+const refreshTasks = async () => {
+  try {
+    await tasksStore.fetchTasks();
+  } catch (error) {
+    console.error('刷新任务列表失败:', error);
+  }
 };
 
 // Handle pomodoro completion or interruption
@@ -533,6 +571,11 @@ const handlePomodoroResult = async (result) => {
       } else {
         console.warn('Failed to play criticism audio, check browser audio permissions');
       }
+    }
+    
+    // 刷新任务数据（如果番茄钟影响了任务状态）
+    if (result.completed || (result.interrupted && result.significantProgress)) {
+      await tasksStore.fetchTasks();
     }
   } catch (error) {
     console.error('Error handling pomodoro result:', error);

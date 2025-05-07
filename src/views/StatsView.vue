@@ -44,7 +44,7 @@
             :key="option.value"
             class="time-option" 
             :class="{ active: timeRange === option.value }"
-            @click="timeRange = option.value"
+            @click="changeTimeRange(option.value)"
           >
             {{ option.label }}
           </div>
@@ -83,27 +83,36 @@
     </div>
     
     <!-- Export Button -->
-    <button class="export-button" @click="exportReport">
-      <font-awesome-icon icon="download" class="btn-icon" />
-      导出统计报告
+    <button class="export-button" @click="exportReport" :disabled="exportLoading">
+      <font-awesome-icon v-if="!exportLoading" icon="download" class="btn-icon" />
+      <font-awesome-icon v-else icon="spinner" class="btn-icon fa-spin" />
+      {{ exportButtonText }}
     </button>
   </BaseLayout>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, reactive } from 'vue';
+import { ref, computed, onMounted, reactive, watch } from 'vue';
 import { Line as LineChart, Bar as BarChart } from 'vue-chartjs';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import BaseLayout from '../components/layout/BaseLayout.vue';
+import { statsApi } from '../api';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
 
+// Loading states
+const todayLoading = ref(false);
+const trendsLoading = ref(false);
+const monthlySummaryLoading = ref(false);
+const exportLoading = ref(false);
+const exportButtonText = ref('导出统计报告');
+
 // Today's statistics
 const todayStats = ref({
-  completedTasks: 6,
-  habitCheckins: 3,
-  focusTime: 2.5
+  completedTasks: 0,
+  habitCheckins: 0,
+  focusTime: 0
 });
 
 // Time range selection
@@ -114,57 +123,26 @@ const timeRangeOptions = [
 ];
 const timeRange = ref('week');
 
-// Default data for charts to avoid undefined errors
-const defaultChartData = {
-  labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-  datasets: [
-    {
-      label: '任务',
-      data: [5, 7, 4, 6, 8, 3, 6],
-      borderColor: '#007AFF',
-      backgroundColor: 'rgba(0, 122, 255, 0.1)',
-      tension: 0.3,
-      fill: true
-    }
-  ]
-};
-
-// Chart data
-const getTimeLabels = computed(() => {
-  if (timeRange.value === 'week') {
-    return ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-  } else if (timeRange.value === 'month') {
-    return ['第1周', '第2周', '第3周', '第4周'];
-  } else {
-    return ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
-  }
+// Trend chart data
+const trendsData = ref({
+  labels: [],
+  datasets: []
 });
 
-// Weekly/Monthly/Yearly trends data
+// Monthly summary data
+const monthlyData = ref({
+  labels: ['任务完成率', '习惯坚持率', '专注效率'],
+  actualData: [0, 0, 0]
+});
+
+// Chart data computations
 const trendChartData = computed(() => {
-  // Generate sample data based on time range
-  let tasksData, habitsData, focusData;
-  
-  if (timeRange.value === 'week') {
-    tasksData = [5, 7, 4, 6, 8, 3, 6];
-    habitsData = [3, 3, 2, 4, 3, 2, 3];
-    focusData = [2.5, 3, 1.5, 4, 3.5, 1, 2.5];
-  } else if (timeRange.value === 'month') {
-    tasksData = [20, 25, 18, 22];
-    habitsData = [14, 15, 12, 16];
-    focusData = [12, 15, 10, 14];
-  } else {
-    tasksData = [60, 65, 70, 68, 72, 75, 78, 72, 68, 70, 65, 62];
-    habitsData = [40, 42, 45, 44, 48, 50, 52, 48, 46, 44, 42, 40];
-    focusData = [35, 38, 42, 40, 45, 48, 50, 45, 42, 40, 38, 36];
-  }
-  
   return {
-    labels: getTimeLabels.value,
+    labels: trendsData.value.labels || [],
     datasets: [
       {
         label: '任务',
-        data: tasksData,
+        data: trendsData.value.datasets?.[0]?.data || [],
         borderColor: '#007AFF',
         backgroundColor: 'rgba(0, 122, 255, 0.1)',
         tension: 0.3,
@@ -172,7 +150,7 @@ const trendChartData = computed(() => {
       },
       {
         label: '习惯',
-        data: habitsData,
+        data: trendsData.value.datasets?.[1]?.data || [],
         borderColor: '#AF52DE',
         backgroundColor: 'rgba(175, 82, 222, 0.1)',
         tension: 0.3,
@@ -180,7 +158,7 @@ const trendChartData = computed(() => {
       },
       {
         label: '专注时间(小时)',
-        data: focusData,
+        data: trendsData.value.datasets?.[2]?.data || [],
         borderColor: '#FF9500',
         backgroundColor: 'rgba(255, 149, 0, 0.1)',
         tension: 0.3,
@@ -225,7 +203,7 @@ const trendChartOptions = {
 // Monthly summary chart data
 const monthlyChartData = computed(() => {
   return {
-    labels: ['任务完成率', '习惯坚持率', '专注效率'],
+    labels: monthlyData.value.labels,
     datasets: [
       {
         label: '目标',
@@ -235,7 +213,7 @@ const monthlyChartData = computed(() => {
       },
       {
         label: '实际',
-        data: [75, 85, 65],
+        data: monthlyData.value.actualData,
         backgroundColor: [
           '#007AFF',
           '#AF52DE',
@@ -292,33 +270,134 @@ const monthlyChartOptions = {
   }
 };
 
-// Handle methods
-const showDetailedStats = () => {
-  // In a real app, this would navigate to a detailed view
-  console.log('Show detailed stats');
-};
-
-const exportReport = () => {
-  // In a real app, this would generate and download a report
-  console.log('Export report');
-  
-  // Show success feedback
-  const button = document.querySelector('.export-button');
-  if (button) {
-    const originalText = button.innerHTML;
-    button.innerHTML = '<i class="fas fa-check-circle mr-2"></i> 报告已导出';
-    button.style.backgroundColor = 'var(--app-success)';
-    
-    setTimeout(() => {
-      button.innerHTML = originalText;
-      button.style.backgroundColor = '';
-    }, 2000);
+// Fetch today's summary data
+const fetchTodaySummary = async () => {
+  todayLoading.value = true;
+  try {
+    console.log('获取今日概览统计数据...');
+    const data = await statsApi.getTodaySummary();
+    todayStats.value = data;
+    console.log('今日概览数据:', data);
+  } catch (error) {
+    console.error('获取今日概览失败:', error);
+  } finally {
+    todayLoading.value = false;
   }
 };
 
-// Initialize charts when component is mounted
+// Fetch trends data
+const fetchTrends = async () => {
+  trendsLoading.value = true;
+  try {
+    console.log(`获取${timeRange.value}趋势数据...`);
+    const data = await statsApi.getTrends(timeRange.value);
+    trendsData.value = data;
+    console.log('趋势数据:', data);
+  } catch (error) {
+    console.error('获取趋势数据失败:', error);
+  } finally {
+    trendsLoading.value = false;
+  }
+};
+
+// Fetch monthly summary data
+const fetchMonthlySummary = async () => {
+  monthlySummaryLoading.value = true;
+  try {
+    // 获取当前月份的YYYY-MM格式
+    const now = new Date();
+    const month = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+    
+    console.log(`获取${month}月度汇总数据...`);
+    const data = await statsApi.getMonthlySummary(month);
+    monthlyData.value = data;
+    console.log('月度汇总数据:', data);
+  } catch (error) {
+    console.error('获取月度汇总失败:', error);
+  } finally {
+    monthlySummaryLoading.value = false;
+  }
+};
+
+// Change time range and fetch new data
+const changeTimeRange = (value) => {
+  timeRange.value = value;
+  fetchTrends();
+};
+
+// Export report
+const exportReport = async () => {
+  exportLoading.value = true;
+  exportButtonText.value = '正在导出...';
+  
+  try {
+    console.log('导出统计报告...');
+    const result = await statsApi.exportReport();
+    
+    if (result.status === 'error') {
+      // 处理尚未实现的情况
+      console.warn('报告导出功能尚未实现:', result.message);
+      
+      // 显示反馈
+      const button = document.querySelector('.export-button');
+      if (button) {
+        exportButtonText.value = '功能尚未实现';
+        button.style.backgroundColor = 'var(--app-warning)';
+        
+        setTimeout(() => {
+          exportButtonText.value = '导出统计报告';
+          button.style.backgroundColor = '';
+          exportLoading.value = false;
+        }, 2000);
+      }
+    } else {
+      // 导出成功的处理逻辑
+      exportButtonText.value = '报告已导出';
+      const button = document.querySelector('.export-button');
+      if (button) {
+        button.style.backgroundColor = 'var(--app-success)';
+        
+        setTimeout(() => {
+          exportButtonText.value = '导出统计报告';
+          button.style.backgroundColor = '';
+          exportLoading.value = false;
+        }, 2000);
+      }
+    }
+  } catch (error) {
+    console.error('导出报告失败:', error);
+    
+    // 显示错误反馈
+    exportButtonText.value = '导出失败';
+    const button = document.querySelector('.export-button');
+    if (button) {
+      button.style.backgroundColor = 'var(--app-danger)';
+      
+      setTimeout(() => {
+        exportButtonText.value = '导出统计报告';
+        button.style.backgroundColor = '';
+        exportLoading.value = false;
+      }, 2000);
+    }
+  }
+};
+
+// Show detailed stats
+const showDetailedStats = () => {
+  console.log('查看详细统计信息');
+  // 这里可以添加导航或弹窗逻辑，显示更详细的统计信息
+};
+
+// Watch for time range changes
+watch(timeRange, () => {
+  fetchTrends();
+});
+
+// Initialize data on component mount
 onMounted(() => {
-  // Animation would be handled by Chart.js
+  fetchTodaySummary();
+  fetchTrends();
+  fetchMonthlySummary();
 });
 </script>
 
@@ -488,8 +567,13 @@ onMounted(() => {
   justify-content: center;
 }
 
-.export-button:active {
+.export-button:active:not(:disabled) {
   transform: scale(0.98);
+}
+
+.export-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .btn-icon {

@@ -47,7 +47,12 @@ import {
   faDownload,
   faPlusCircle,
   faHistory,
-  faSave
+  faSave,
+  // Stats API icons
+  faSpinner,
+  faVial,
+  faTasks,
+  faCalendarCheck
 } from '@fortawesome/free-solid-svg-icons';
 
 // 添加需要的图标到库
@@ -98,7 +103,12 @@ library.add(
   faDownload,
   faPlusCircle,
   faHistory,
-  faSave
+  faSave,
+  // Stats API icons
+  faSpinner,
+  faVial,
+  faTasks,
+  faCalendarCheck
 );
 
 // 导出组件和图标列表
